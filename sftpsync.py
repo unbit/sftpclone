@@ -54,16 +54,16 @@ class SFTPsync(object):
         # get the local link
         local_link = os.readlink(local_filename)
         if not local_link.startswith('/'):
-            local_link = os.path.join(self.parent(local_flename), local_link)
-        r_st = sftp.lstat(remote_filename)
+            local_link = os.path.join(self.parent(local_filename), local_link)
+        r_st = self.sftp.lstat(remote_filename)
         if self._is_not_link(r_st):
             self.remote_delete(remote_filename)
-        remote_link = sftp.readlink(remote_filename)
+        remote_link = self.sftp.readlink(remote_filename)
         if local_link != remote_link:
             self.remote_delete(remote_filename)
 
         if not local_link.startswith('/'):
-            sftp.symlink(local_link, remote_filename)
+            self.sftp.symlink(local_link, remote_filename)
 
     def _must_be_deleted(self, remote, r_mode):
         if not os.path.lexists(remote):
@@ -103,7 +103,7 @@ class SFTPsync(object):
                     r_st = self.sftp.lstat(filename)
                     # if it is not a directory, destroy it
                     if not S_ISDIR(r_st.st_mode):
-                        remote_delete(filename, r_st)
+                        self.remote_delete(filename, r_st)
                         raise IOError
                 except IOError:
                     self.sftp.mkdir(filename)
@@ -121,7 +121,7 @@ class SFTPsync(object):
                     remote_link = self.sftp.readlink(filename)
                     if local_link != remote_link:
                         print 'DIFFERENT LINK', remote_link, local_link
-                        remote_delete(filename, r_st)
+                        self.remote_delete(filename, r_st)
                         raise IOError
                     print 'LINKTO', remote_link
                 except IOError:
