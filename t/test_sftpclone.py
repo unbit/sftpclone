@@ -226,8 +226,15 @@ def test_remote_but_not_local_directories():
     # now we create some remote directories that should be deleted
     full_dirs = set(random.sample(local_dirs, 2))
     for f in full_dirs:
+        inner_path = join(REMOTE_PATH, f)
+        for s in range(random.randint(1, 4)):
+            inner_path = join(inner_path, str(s))
+            os.mkdir(inner_path)
+
         for i in range(3):
-            os.open(join(REMOTE_PATH, f, str(i)), os.O_CREAT)
+            os.open(join(inner_path, str(i)), os.O_CREAT)
+
+    list_files(REMOTE_PATH)
 
     # Sync and check the results
     _sync()
