@@ -16,7 +16,7 @@ from stat import S_ISDIR
 
 import paramiko
 from t.stub_sftp import StubServer, StubSFTPServer
-from t.utils import t_path, list_files
+from t.utils import t_path, list_files, file_tree
 import socket
 import select
 
@@ -29,7 +29,8 @@ REMOTE_ROOT = t_path("server_root")
 REMOTE_FOLDER = "server_folder"
 REMOTE_PATH = join(REMOTE_ROOT, REMOTE_FOLDER)
 
-LOCAL_FOLDER = t_path("local_folder")
+LOCAL_FOLDER_NAME = "local_folder"
+LOCAL_FOLDER = t_path(LOCAL_FOLDER_NAME)
 
 event = threading.Event()
 
@@ -101,16 +102,83 @@ def teardown_test():
 teardown_test.__test__ = False
 
 
-def _sync():
-    """Launch sync."""
+def _sync(password=None, fix=False):
+    """Launch sync and do basic comparison of dir trees."""
+    if not password:
+        remote = 'test@127.0.0.1:' + '/' + REMOTE_FOLDER
+    else:
+        remote = 'test:secret@127.0.0.1:' + '/' + REMOTE_FOLDER
+
     sync = SFTPClone(
         LOCAL_FOLDER,
-        'test@127.0.0.1:' + '/' + REMOTE_FOLDER,
-        key=t_path('id_rsa'),
-        port=2222
+        remote,
+        port=2222,
+        fix_symlinks=fix
     )
     sync.run()
+
+    # check the directory trees
+    assert \
+        file_tree(
+            LOCAL_FOLDER
+        )[LOCAL_FOLDER_NAME] == file_tree(
+            REMOTE_PATH
+        )[REMOTE_FOLDER]
 _sync.__test__ = False
+
+
+# @with_setup(setup_test, teardown_test)
+# def test_local_relative_link():
+#     """Test relative links creation/update (cases C/D)."""
+#     old_cwd = os.getcwd()
+#     os.chdir(LOCAL_FOLDER)  # relative links!
+
+#     local_symlinks = {
+#         "3": "afile",
+#         # "4": "/dev/null"
+#     }
+#     for link_name, source in local_symlinks.items():
+#         os.symlink(source, link_name)
+
+#     normal_files = ("bar", "bis")
+#     for f in normal_files:
+#         os.open(f, os.O_CREAT)
+#         os.open(join(REMOTE_PATH, f), os.O_CREAT)
+
+#     _sync()
+
+#     for link_name, source in local_symlinks:
+#         assert os.readlink(join(REMOTE_PATH, link_name)) is not None
+
+#     os.chdir(old_cwd)
+
+
+@with_setup(setup_test, teardown_test)
+def test_local_absolute_link():
+    """Test absolute links creation/update (cases A/B)."""
+    os.chdir(LOCAL_FOLDER)  # relative links!
+
+    inside_symlinks = {
+        "3": "afile",  # case A
+    }
+
+    outside_symlinks = {
+        "4": "/dev/null"  # case B
+    }
+
+    for link_name, source in inside_symlinks.items():
+        os.symlink(join(LOCAL_FOLDER, source), join(LOCAL_FOLDER, link_name))
+
+    for link_name, source in outside_symlinks.items():
+        os.symlink(source, join(LOCAL_FOLDER, link_name))
+
+    _sync(fix=True)
+
+    for link_name, source in inside_symlinks.items():
+        assert os.readlink(join(REMOTE_FOLDER, link_name)) == join(REMOTE_FOLDER, link_name)
+
+    for link_name, source in outside_symlinks.items():
+        assert os.readlink(join(REMOTE_FOLDER, link_name)) == source
 
 
 @with_setup(setup_test, teardown_test)
@@ -120,13 +188,21 @@ def test_directory_upload():
     local_dirs = {str(f) for f in range(8)}
     remote_dirs = set(random.sample(local_dirs, 3))
 
-    spurious_dir = join(REMOTE_PATH, random.choice(tuple(local_dirs - remote_dirs)))
+    spurious_dir = join(
+        REMOTE_PATH, random.choice(tuple(local_dirs - remote_dirs)))
     os.open(spurious_dir, os.O_CREAT)
 
     for f in local_dirs:
         os.mkdir(join(LOCAL_FOLDER, f))
     for f in remote_dirs:
         os.mkdir(join(REMOTE_PATH, f))
+
+    # Locally different is folder, but remotely is a file
+    f = "different"
+    remote_dirs |= {f}
+    os.open(join(REMOTE_PATH, f), os.O_CREAT)
+    local_dirs |= {f}
+    os.mkdir(join(LOCAL_FOLDER, f))
 
     full_dirs = set(random.sample(local_dirs, 2))
     for f in full_dirs:
@@ -137,7 +213,8 @@ def test_directory_upload():
 
     assert S_ISDIR(os.stat(spurious_dir).st_mode)
     for d in full_dirs:
-        assert os.listdir(join(LOCAL_FOLDER, d)) == os.listdir(join(REMOTE_PATH, d))
+        assert os.listdir(join(LOCAL_FOLDER, d)) == os.listdir(
+            join(REMOTE_PATH, d))
 
 
 @with_setup(setup_test, teardown_test)
@@ -171,7 +248,8 @@ def test_file_upload():
     copy(l, join(REMOTE_PATH, "6"))
 
     # Sync and check that missing files where uploaded
-    _sync()
+    # Password authentication here!
+    _sync(password=True)
 
     assert set(os.listdir(REMOTE_PATH)) == local_files
     files = {"5", "6"}
@@ -194,13 +272,20 @@ def test_remote_but_not_local_files():
     Remove files present on the remote directory but not in the local one.
     """
     # add some file to the remote directory
-    remote_files = {str(f) for f in range(5)}
+    remote_files = {str(f) for f in range(8)}
     local_files = set(random.sample(remote_files, 3))
 
     for f in remote_files:
         os.open(join(REMOTE_PATH, f), os.O_CREAT)
     for f in local_files:
         os.open(join(LOCAL_FOLDER, f), os.O_CREAT)
+
+    # Locally different is folder, but remotely is a file
+    f = "different"
+    remote_files |= {f}
+    os.open(join(REMOTE_PATH, f), os.O_CREAT)
+    local_files |= {f}
+    os.mkdir(join(LOCAL_FOLDER, f))
 
     # Sync and check the results
     _sync()
@@ -234,7 +319,12 @@ def test_remote_but_not_local_directories():
         for i in range(3):
             os.open(join(inner_path, str(i)), os.O_CREAT)
 
-    list_files(REMOTE_PATH)
+    # Locally different is a file, but remotely is a folder
+    f = "different"
+    remote_dirs |= {f}
+    os.open(join(LOCAL_FOLDER, f), os.O_CREAT)
+    local_dirs |= {f}
+    os.mkdir(join(REMOTE_PATH, f))
 
     # Sync and check the results
     _sync()

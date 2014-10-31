@@ -11,13 +11,14 @@ import os.path
 from os.path import join
 import errno
 from stat import S_ISDIR, S_ISLNK, S_ISREG, S_IMODE, S_IFMT
+import argparse
 
 
 class SFTPClone(object):
 
     """The SFTPClone class."""
 
-    def __init__(self, local_path, remote_url, key=None, port=22):
+    def __init__(self, local_path, remote_url, key=None, port=22, fix_symlinks=False):
         """Init the needed parameters and the SFTPClient."""
         self.local_path = local_path
         self.username, self.hostname = remote_url.split('@', 1)
@@ -30,6 +31,8 @@ class SFTPClone(object):
         self.port = port
         self.chown = False
         self.pkey = None
+
+        self.fix_symlinks = fix_symlinks
 
         if key:
             self.pkey = paramiko.RSAKey.from_private_key_file(key)
@@ -52,28 +55,12 @@ class SFTPClone(object):
 
     def file_upload(self, localpath, remotepath, l_st):
         """Upload localpath to remotepath and set permission and mtime."""
-        print("uploading", localpath)
         self.sftp.put(localpath, remotepath)
         self.sftp.chmod(remotepath, S_IMODE(l_st.st_mode))
         self.sftp.utime(remotepath, (l_st.st_atime, l_st.st_mtime))
 
         if self.chown:
             self.sftp.chown(remotepath, l_st.st_uid, l_st.st_gid)
-
-    # def _manage_link(self, local_filename, remote_filename):
-    #     # get the local link
-    #     local_link = os.readlink(local_filename)
-    #     if not local_link.startswith('/'):
-    #         local_link = join(self.parent(local_filename), local_link)
-    #     r_st = self.sftp.lstat(remote_filename)
-    #     if self._is_not_link(r_st):
-    #         self.remote_delete(remote_filename)
-    #     remote_link = self.sftp.readlink(remote_filename)
-    #     if local_link != remote_link:
-    #         self.remote_delete(remote_filename)
-
-    #     if not local_link.startswith('/'):
-    #         self.sftp.symlink(local_link, remote_filename)
 
     def _must_be_deleted(self, local_path, r_st):
         """Return True if the remote correspondent of local_path has to be deleted.
@@ -92,7 +79,7 @@ class SFTPClone(object):
 
     def remote_delete(self, remote_path, r_st):
         """Remove the remote directory node."""
-        # If it's a directory, then delete content and dir
+        # If it's a directory, then delete content and directory
         if S_ISDIR(r_st.st_mode):
             for item in self.sftp.listdir_attr(remote_path):
                 full_path = join(remote_path, item.filename)
@@ -101,7 +88,11 @@ class SFTPClone(object):
 
         # Or simply delete simple files
         else:
-            self.sftp.remove(remote_path)
+            try:
+                self.sftp.remove(remote_path)
+            except FileNotFoundError as e:
+                print(
+                    "error while removing {}. trace:\n{}".format(remote_path, e))
 
     def check_for_deletion(self, relative_path=None):
         """Traverse the entire remote_path tree.
@@ -116,6 +107,11 @@ class SFTPClone(object):
         local_path = join(self.local_path, relative_path)
 
         for remote_st in self.sftp.listdir_attr(remote_path):
+            # check if remote_st is a symlink
+            # otherwise could delete file outside shared directory
+            if S_ISLNK(self.sftp.lstat(join(remote_path, remote_st.filename)).st_mode):
+                continue
+
             inner_remote_path = join(remote_path, remote_st.filename)
             inner_local_path = join(local_path, remote_st.filename)
 
@@ -126,10 +122,23 @@ class SFTPClone(object):
                     join(relative_path, remote_st.filename)
                 )
 
+    def create_update_symlink(self, link_destination, remote_path):
+        """Create a new link pointing to link_destination in remote_path position."""
+        try:  # check if the remote link exists
+            remote_link = self.sftp.readlink(remote_path)
+
+            # if it does exist and it is different, update it
+            if link_destination != remote_link:
+                self.sftp.remove(remote_path)
+                self.sftp.symlink(remote_path, link_destination)
+        except IOError:  # if not, create it and done!
+            self.sftp.symlink(remote_path, link_destination)
+
     def node_check_for_upload_create(self, relative_path, f):
         """Check if the given directory tree node has to be uploaded/created on the remote folder."""
         if not relative_path:
-            relative_path = str()  # we're at the root of the shared dir tree
+            # we're at the root of the shared directory tree
+            relative_path = str()
 
         # the (absolute) local address of f.
         local_path = join(self.local_path, relative_path, f)
@@ -140,41 +149,64 @@ class SFTPClone(object):
 
         # First case: f is a directory
         if S_ISDIR(l_st.st_mode):
-            try:
-                r_st = self.sftp.lstat(remote_path)
-                # if it is not a directory, destroy it
-                if not S_ISDIR(r_st.st_mode):
-                    self.remote_delete(remote_path, r_st)
-                    raise IOError
-            except IOError:
-                self.sftp.mkdir(remote_path)
             # FIXME: uid, gid, mod, utime, ...
 
-            # now, we should traverse f too (recursion magic)
+            # we check if the folder exists on the remote side
+            # it has to be a folder, otherwise it would have already been
+            # deleted
+            try:
+                r_st = self.sftp.stat(remote_path)
+            except IOError:  # it doesn't exist yet on remote side
+                self.sftp.mkdir(remote_path)
+
+            # now, we should traverse f too (recursion magic!)
             self.check_for_upload_create(join(relative_path, f))
 
         # Second case: f is a symbolic link
         elif S_ISLNK(l_st.st_mode):
-            local_link = os.readlink(local_path)
-            if not local_link.startswith('/'):
-                local_link = join(self.local_path, local_link)
-                remote_link = join(self.remote_path, local_link)
-            try:
-                r_st = self.sftp.lstat(remote_path)
-                if not S_ISLNK(r_st.st_mode):
-                    self.remote_delete(remote_path, r_st)
-                    raise IOError
-
-                remote_link = self.sftp.readlink(remote_path)
-                if local_link != remote_link:
-                    print('DIFFERENT LINK', remote_link, local_link)
-                    self.remote_delete(remote_path, r_st)
-                    raise IOError
-
-                print('LINKTO', remote_link)
-            except IOError:
-                self.sftp.symlink(remote_link, remote_path)
             # FIXME: uid, gid, mod, utime, ...
+
+            # read the local link
+            local_link = os.readlink(local_path)
+            absolute_local_link = os.path.realpath(local_link)
+
+            # is it absolute?
+            is_absolute = local_link.startswith("/")
+            # and does it point inside the shared directory?
+            relpath = os.path.relpath(
+                absolute_local_link,
+                start=os.path.realpath(self.local_path)
+            )
+
+            print(
+                "TAG",
+                local_link,
+                absolute_local_link,
+                is_absolute,
+                relpath,
+                sep="\n"
+            )
+
+            # Case A: absolute link pointing outside shared directory
+            #   (we can only update the remote part)
+            if is_absolute and not relpath:
+                self.create_update_symlink(local_link, remote_path)
+
+            # Case B: absolute link pointing inside shared directory
+            #   (we can leave it as it is or fix the prefix to match the one of the remote server)
+            elif is_absolute and relpath:
+                if self.fix_symlinks:
+                    pass
+                else:
+                    self.create_update_symlink(local_link, remote_path)
+
+            # Case C: relative link pointing outside shared directory
+            elif not is_absolute and not relpath:
+                pass
+
+            # Case D: relative link pointing inside shared directory
+            elif not is_absolute and relpath:
+                pass
 
         # Third case: regular file
         elif S_ISREG(l_st.st_mode):
@@ -184,7 +216,6 @@ class SFTPClone(object):
                     self.file_upload(local_path, remote_path, l_st)
             except IOError as e:
                 if e.errno == errno.ENOENT:
-                    print("In upload %s %s" % (local_path, remote_path))
                     self.file_upload(local_path, remote_path, l_st)
 
         # Anything else.
@@ -210,3 +241,56 @@ class SFTPClone(object):
 
         # now scan local for items to upload/create
         self.check_for_upload_create()
+
+
+def main():
+    """The main."""
+    parser = argparse.ArgumentParser(description='Sync a local and a remote folder through SFTP.')
+    parser.add_argument(
+                    "local",
+                    type=str,
+                    help="the path of the local folder",
+                )
+
+    parser.add_argument(
+                    "remote",
+                    type=str,
+                    help="the ssh-url of the remote folder",
+                )
+
+    parser.add_argument(
+                    "-k",
+                    "--key",
+                    type=str,
+                    help="Private key identity path."
+                )
+
+    parser.add_argument(
+                    "-p",
+                    "--port",
+                    type=int,
+                    help="The remote port."
+                )
+
+    parser.add_argument(
+                    "-f",
+                    "--fix_absolute_symlinks",
+                    action="store_true",
+                    help="Fix absolute symlinks on remote side."
+                )
+
+    args = parser.parse_args()
+
+    sync = SFTPClone(
+        local_path=args.local,
+        remote_url=args.remote,
+        port=args.port,
+        key=args.key,
+        fix_symlinks=args.fix_absolute_symlinks
+    )
+    sync.run()
+
+
+if __name__ == '__main__':
+    print("FOOO!")
+    main()
