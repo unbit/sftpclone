@@ -7,6 +7,11 @@
 # Simply launch me by using nosetests and I'll do the magic.
 # I require paramiko
 
+# Python 2.7 backward compatibility
+from __future__ import print_function
+from __future__ import unicode_literals
+from __future__ import absolute_import
+
 import threading
 import os
 from os.path import join
@@ -263,21 +268,21 @@ def test_file_upload():
 
     local_files |= {"5"}
     with open(join(LOCAL_FOLDER, "5"), 'w') as f:
-        print("This is the local file.", file=f, flush=True)
+        print("This is the local file.", file=f)
     remote_files |= {"5"}
     with open(join(REMOTE_PATH, "5"), 'w') as f:
-        print("This is the remote file.", file=f, flush=True)
+        print("This is the remote file.", file=f)
 
     local_files |= {"6"}
     l = join(LOCAL_FOLDER, "6")
     with open(l, 'w') as f:
-        print("This is another file.", file=f, flush=True)
+        print("This is another file.", file=f)
     remote_files |= {"6"}
     copy(l, join(REMOTE_PATH, "6"))
 
     local_files |= {"permissions"}
     l = join(LOCAL_FOLDER, "permissions")
-    os.open(l, os.O_CREAT, mode=0o644)
+    os.open(l, os.O_CREAT)
 
     # Sync and check that missing files where uploaded
     # Password authentication here!
