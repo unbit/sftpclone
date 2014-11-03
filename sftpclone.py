@@ -59,14 +59,18 @@ class SFTPClone(object):
             (l_st.st_size != r_st.st_size) or (int(l_st.st_mtime) != r_st.st_mtime) \
             else False
 
-    def file_upload(self, localpath, remotepath, l_st):
-        """Upload localpath to remotepath and set permission and mtime."""
-        self.sftp.put(localpath, remotepath)
-        self.sftp.chmod(remotepath, S_IMODE(l_st.st_mode))
-        self.sftp.utime(remotepath, (l_st.st_atime, l_st.st_mtime))
+    def _match_modes(self, remote_path, l_st):
+        """Match mod, utime and uid/gid with locals one."""
+        self.sftp.chmod(remote_path, S_IMODE(l_st.st_mode))
+        self.sftp.utime(remote_path, (l_st.st_atime, l_st.st_mtime))
 
         if self.chown:
-            self.sftp.chown(remotepath, l_st.st_uid, l_st.st_gid)
+            self.sftp.chown(remote_path, l_st.st_uid, l_st.st_gid)
+
+    def file_upload(self, local_path, remote_path, l_st):
+        """Upload local_path to remote_path and set permission and mtime."""
+        self.sftp.put(local_path, remote_path)
+        self._match_modes(remote_path, l_st)
 
     def _must_be_deleted(self, local_path, r_st):
         """Return True if the remote correspondent of local_path has to be deleted.
@@ -92,13 +96,13 @@ class SFTPClone(object):
                 self.remote_delete(full_path, item)
             self.sftp.rmdir(remote_path)
 
-        # Or simply delete simple files
+        # Or simply delete files
         else:
             try:
                 self.sftp.remove(remote_path)
             except FileNotFoundError as e:
                 logging.error(
-                    "error while removing {}. trace:\n{}".format(remote_path, e)
+                    "error while removing {}. trace: {}".format(remote_path, e)
                 )
 
     def check_for_deletion(self, relative_path=None):
@@ -114,13 +118,17 @@ class SFTPClone(object):
         local_path = join(self.local_path, relative_path)
 
         for remote_st in self.sftp.listdir_attr(remote_path):
-            # check if remote_st is a symlink
-            # otherwise could delete file outside shared directory
-            if S_ISLNK(self.sftp.lstat(join(remote_path, remote_st.filename)).st_mode):
-                continue
+            r_lstat = self.sftp.lstat(join(remote_path, remote_st.filename))
 
             inner_remote_path = join(remote_path, remote_st.filename)
             inner_local_path = join(local_path, remote_st.filename)
+
+            # check if remote_st is a symlink
+            # otherwise could delete file outside shared directory
+            if S_ISLNK(r_lstat.st_mode):
+                if (self._must_be_deleted(inner_local_path, r_lstat)):
+                    self.remote_delete(inner_remote_path, r_lstat)
+                continue
 
             if self._must_be_deleted(inner_local_path, remote_st):
                 self.remote_delete(inner_remote_path, remote_st)
@@ -143,7 +151,7 @@ class SFTPClone(object):
                     self.sftp.symlink(link_destination, remote_path)
             except IOError:  # if not, create it and done!
                 self.sftp.symlink(link_destination, remote_path)
-        except OSError as e:  # somethimes symlinking fails if absolute path are "too" different
+        except OSError as e:  # sometimes symlinking fails if absolute path are "too" different
         # Sadly, nothing we can do about it.
             logging.error("error while symlinking {} to {}: {}".format(remote_path, link_destination, e))
 
@@ -162,8 +170,6 @@ class SFTPClone(object):
 
         # First case: f is a directory
         if S_ISDIR(l_st.st_mode):
-            # FIXME: uid, gid, mod, utime, ...
-
             # we check if the folder exists on the remote side
             # it has to be a folder, otherwise it would have already been
             # deleted
@@ -172,13 +178,13 @@ class SFTPClone(object):
             except IOError:  # it doesn't exist yet on remote side
                 self.sftp.mkdir(remote_path)
 
+            self._match_modes(remote_path, l_st)
+
             # now, we should traverse f too (recursion magic!)
             self.check_for_upload_create(join(relative_path, f))
 
         # Second case: f is a symbolic link
         elif S_ISLNK(l_st.st_mode):
-            # FIXME: uid, gid, mod, utime, ...
-
             # read the local link
             local_link = os.readlink(local_path)
             absolute_local_link = os.path.realpath(local_link)

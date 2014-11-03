@@ -196,6 +196,20 @@ def test_local_absolute_link():
 
 
 @with_setup(setup_test, teardown_test)
+def test_orphaned_remote_symlink():
+    """Test deletion of orphaned remote links (not existing in local folder)."""
+    os.open(join(REMOTE_PATH, "file"), os.O_CREAT)
+    os.open(join(LOCAL_FOLDER, "file"), os.O_CREAT)
+
+    os.symlink(
+        join(REMOTE_PATH, "file"),
+        join(REMOTE_PATH, "link")
+    )
+
+    _sync(fix=True)
+
+
+@with_setup(setup_test, teardown_test)
 def test_directory_upload():
     """Test upload/creation of whole directory trees."""
     # add some dirs to both the local/remote directories
@@ -261,12 +275,16 @@ def test_file_upload():
     remote_files |= {"6"}
     copy(l, join(REMOTE_PATH, "6"))
 
+    local_files |= {"permissions"}
+    l = join(LOCAL_FOLDER, "permissions")
+    os.open(l, os.O_CREAT, mode=0o644)
+
     # Sync and check that missing files where uploaded
     # Password authentication here!
     _sync(password=True)
 
     assert set(os.listdir(REMOTE_PATH)) == local_files
-    files = {"5", "6"}
+    files = {"5", "6", "permissions"}
     for f in files:
         lf, rf = join(LOCAL_FOLDER, f), join(REMOTE_PATH, f)
         assert os.stat(lf).st_size == os.stat(rf).st_size
