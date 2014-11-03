@@ -70,6 +70,8 @@ def _start_sftp_server():
 
 def setup_module():
     """Setup in a new thread the SFTP local server."""
+    os.mkdir(REMOTE_ROOT)
+
     t = threading.Thread(target=_start_sftp_server, name="server")
     t.start()
 
@@ -83,6 +85,7 @@ def teardown_module():
 
     rmtree(REMOTE_PATH, ignore_errors=True)
     rmtree(LOCAL_FOLDER, ignore_errors=True)
+    rmtree(REMOTE_ROOT, ignore_errors=True)
 
 
 def setup_test():
@@ -127,37 +130,46 @@ def _sync(password=None, fix=False):
 _sync.__test__ = False
 
 
-# @with_setup(setup_test, teardown_test)
-# def test_local_relative_link():
-#     """Test relative links creation/update (cases C/D)."""
-#     old_cwd = os.getcwd()
-#     os.chdir(LOCAL_FOLDER)  # relative links!
+@with_setup(setup_test, teardown_test)
+def test_local_relative_link():
+    """Test relative links creation/update (cases C/D)."""
+    old_cwd = os.getcwd()
+    os.chdir(LOCAL_FOLDER)  # relative links!
 
-#     local_symlinks = {
-#         "3": "afile",
-#         # "4": "/dev/null"
-#     }
-#     for link_name, source in local_symlinks.items():
-#         os.symlink(source, link_name)
+    inside_symlinks = {
+        "3": "afile",
+        "5": "inner/foo"
+    }
 
-#     normal_files = ("bar", "bis")
-#     for f in normal_files:
-#         os.open(f, os.O_CREAT)
-#         os.open(join(REMOTE_PATH, f), os.O_CREAT)
+    outside_symlinks = {
+        "4": "../foo"
+    }
 
-#     _sync()
+    for link_name, source in inside_symlinks.items():
+        os.symlink(source, link_name)
 
-#     for link_name, source in local_symlinks:
-#         assert os.readlink(join(REMOTE_PATH, link_name)) is not None
+    for link_name, source in outside_symlinks.items():
+        os.symlink(source, link_name)
 
-#     os.chdir(old_cwd)
+    normal_files = ("bar", "bis")  # just to add noise
+    for f in normal_files:
+        os.open(f, os.O_CREAT)
+        os.open(join(REMOTE_PATH, f), os.O_CREAT)
+
+    _sync()
+
+    for link_name, source in inside_symlinks.items():
+        assert os.readlink(join(REMOTE_PATH, link_name)) == source
+
+    for link_name, source in outside_symlinks.items():
+        assert os.readlink(join(REMOTE_PATH, link_name)) == source
+
+    os.chdir(old_cwd)
 
 
 @with_setup(setup_test, teardown_test)
 def test_local_absolute_link():
     """Test absolute links creation/update (cases A/B)."""
-    os.chdir(LOCAL_FOLDER)  # relative links!
-
     inside_symlinks = {
         "3": "afile",  # case A
     }
@@ -165,6 +177,8 @@ def test_local_absolute_link():
     outside_symlinks = {
         "4": "/dev/null"  # case B
     }
+
+    os.mkdir(join(REMOTE_ROOT, "dev"))  # otherwise absolute links will fail!
 
     for link_name, source in inside_symlinks.items():
         os.symlink(join(LOCAL_FOLDER, source), join(LOCAL_FOLDER, link_name))
@@ -175,10 +189,10 @@ def test_local_absolute_link():
     _sync(fix=True)
 
     for link_name, source in inside_symlinks.items():
-        assert os.readlink(join(REMOTE_FOLDER, link_name)) == join(REMOTE_FOLDER, link_name)
+        assert os.readlink(join(REMOTE_PATH, link_name)) == join(REMOTE_PATH, source)
 
     for link_name, source in outside_symlinks.items():
-        assert os.readlink(join(REMOTE_FOLDER, link_name)) == source
+        assert os.readlink(join(REMOTE_PATH, link_name))[len(REMOTE_ROOT):] == source
 
 
 @with_setup(setup_test, teardown_test)

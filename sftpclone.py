@@ -12,6 +12,12 @@ from os.path import join
 import errno
 from stat import S_ISDIR, S_ISLNK, S_ISREG, S_IMODE, S_IFMT
 import argparse
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 
 class SFTPClone(object):
@@ -20,7 +26,7 @@ class SFTPClone(object):
 
     def __init__(self, local_path, remote_url, key=None, port=22, fix_symlinks=False):
         """Init the needed parameters and the SFTPClient."""
-        self.local_path = local_path
+        self.local_path = os.path.realpath(local_path)
         self.username, self.hostname = remote_url.split('@', 1)
         self.hostname, self.remote_path = self.hostname.split(':', 1)
         self.password = None
@@ -91,8 +97,9 @@ class SFTPClone(object):
             try:
                 self.sftp.remove(remote_path)
             except FileNotFoundError as e:
-                print(
-                    "error while removing {}. trace:\n{}".format(remote_path, e))
+                logging.error(
+                    "error while removing {}. trace:\n{}".format(remote_path, e)
+                )
 
     def check_for_deletion(self, relative_path=None):
         """Traverse the entire remote_path tree.
@@ -124,15 +131,21 @@ class SFTPClone(object):
 
     def create_update_symlink(self, link_destination, remote_path):
         """Create a new link pointing to link_destination in remote_path position."""
-        try:  # check if the remote link exists
-            remote_link = self.sftp.readlink(remote_path)
+        logging.debug("Linking {} to {}".format(remote_path, link_destination))
 
-            # if it does exist and it is different, update it
-            if link_destination != remote_link:
-                self.sftp.remove(remote_path)
-                self.sftp.symlink(remote_path, link_destination)
-        except IOError:  # if not, create it and done!
-            self.sftp.symlink(remote_path, link_destination)
+        try:
+            try:  # check if the remote link exists
+                remote_link = self.sftp.readlink(remote_path)
+
+                # if it does exist and it is different, update it
+                if link_destination != remote_link:
+                    self.sftp.remove(remote_path)
+                    self.sftp.symlink(link_destination, remote_path)
+            except IOError:  # if not, create it and done!
+                self.sftp.symlink(link_destination, remote_path)
+        except OSError as e:  # somethimes symlinking fails if absolute path are "too" different
+        # Sadly, nothing we can do about it.
+            logging.error("error while symlinking {} to {}: {}".format(remote_path, link_destination, e))
 
     def node_check_for_upload_create(self, relative_path, f):
         """Check if the given directory tree node has to be uploaded/created on the remote folder."""
@@ -173,18 +186,24 @@ class SFTPClone(object):
             # is it absolute?
             is_absolute = local_link.startswith("/")
             # and does it point inside the shared directory?
-            relpath = os.path.relpath(
-                absolute_local_link,
-                start=os.path.realpath(self.local_path)
-            )
+            trailing_local_path = join(self.local_path, '')  # add trailing slash (security)
+            relpath = os.path.commonprefix(
+                [absolute_local_link,
+                 trailing_local_path]
+            ) == trailing_local_path
 
-            print(
-                "TAG",
+            if relpath:
+                relative_link = absolute_local_link[len(trailing_local_path):]
+            else:
+                relative_link = None
+
+            logging.debug(
+                "TAG: %s %s %s %s %s",
                 local_link,
                 absolute_local_link,
+                self.local_path,
                 is_absolute,
                 relpath,
-                sep="\n"
             )
 
             # Case A: absolute link pointing outside shared directory
@@ -196,17 +215,25 @@ class SFTPClone(object):
             #   (we can leave it as it is or fix the prefix to match the one of the remote server)
             elif is_absolute and relpath:
                 if self.fix_symlinks:
-                    pass
+                    self.create_update_symlink(
+                        join(
+                            self.remote_path,
+                            relative_link,
+                        ),
+                        remote_path
+                    )
                 else:
                     self.create_update_symlink(local_link, remote_path)
 
             # Case C: relative link pointing outside shared directory
+            #   (all we can do is try to make the link anyway)
             elif not is_absolute and not relpath:
-                pass
+                self.create_update_symlink(local_link, remote_path)
 
             # Case D: relative link pointing inside shared directory
+            #   (we preserve the relativity and link it!)
             elif not is_absolute and relpath:
-                pass
+                self.create_update_symlink(local_link, remote_path)
 
         # Third case: regular file
         elif S_ISREG(l_st.st_mode):
@@ -220,7 +247,7 @@ class SFTPClone(object):
 
         # Anything else.
         else:
-            print("UNSUPPORTED", local_path)
+            logging.error("UNSUPPORTED", local_path)
 
     def check_for_upload_create(self, relative_path=None):
         """Traverse the relative_path tree and check for files that need to be uploaded/created.
@@ -245,39 +272,40 @@ class SFTPClone(object):
 
 def main():
     """The main."""
-    parser = argparse.ArgumentParser(description='Sync a local and a remote folder through SFTP.')
+    parser = argparse.ArgumentParser(
+        description='Sync a local and a remote folder through SFTP.')
     parser.add_argument(
-                    "local",
-                    type=str,
-                    help="the path of the local folder",
-                )
+        "local",
+        type=str,
+        help="the path of the local folder",
+    )
 
     parser.add_argument(
-                    "remote",
-                    type=str,
-                    help="the ssh-url of the remote folder",
-                )
+        "remote",
+        type=str,
+        help="the ssh-url of the remote folder",
+    )
 
     parser.add_argument(
-                    "-k",
-                    "--key",
-                    type=str,
-                    help="Private key identity path."
-                )
+        "-k",
+        "--key",
+        type=str,
+        help="Private key identity path."
+    )
 
     parser.add_argument(
-                    "-p",
-                    "--port",
-                    type=int,
-                    help="The remote port."
-                )
+        "-p",
+        "--port",
+        type=int,
+        help="The remote port."
+    )
 
     parser.add_argument(
-                    "-f",
-                    "--fix_absolute_symlinks",
-                    action="store_true",
-                    help="Fix absolute symlinks on remote side."
-                )
+        "-f",
+        "--fix_absolute_symlinks",
+        action="store_true",
+        help="Fix absolute symlinks on remote side."
+    )
 
     args = parser.parse_args()
 

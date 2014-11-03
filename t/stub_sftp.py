@@ -192,13 +192,7 @@ class StubSFTPServer (SFTPServerInterface):
         if (len(target_path) > 0) and (target_path[0] == '/'):
             # absolute symlink
             target_path = os.path.join(self.ROOT, target_path[1:])
-        # else:
-        #     # compute relative to path
-        #     abspath = os.path.join(os.path.dirname(path), target_path)
-        #     if abspath[:len(self.ROOT)] != self.ROOT:
-        #         # this symlink isn't going to work anyway -- just break it
-        #         # immediately
-        #         target_path = '<error>'
+
         try:
             os.symlink(target_path, path)
         except OSError as e:
