@@ -212,6 +212,9 @@ class SFTPClone(object):
                 relpath,
             )
 
+            """
+            # Refactor them all, be efficient!
+
             # Case A: absolute link pointing outside shared directory
             #   (we can only update the remote part)
             if is_absolute and not relpath:
@@ -239,6 +242,19 @@ class SFTPClone(object):
             # Case D: relative link pointing inside shared directory
             #   (we preserve the relativity and link it!)
             elif not is_absolute and relpath:
+                self.create_update_symlink(local_link, remote_path)
+            """
+
+            if is_absolute and relpath:
+                if self.fix_symlinks:
+                    self.create_update_symlink(
+                        join(
+                            self.remote_path,
+                            relative_link,
+                        ),
+                        remote_path
+                    )
+            else:
                 self.create_update_symlink(local_link, remote_path)
 
         # Third case: regular file
