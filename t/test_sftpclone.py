@@ -152,6 +152,21 @@ def capture_sys_output():
         sys.stdout, sys.stderr = current_out, current_err
 
 
+@contextmanager
+def override_env_variables():
+    """Override user enviromental variables with custom one."""
+    vars = ("LOGNAME", "USER", "LNAME", "USERNAME")
+    old = [os.environ[v] if v in os.environ else None for v in vars]
+
+    for v in vars:
+        os.environ[v] = "test"
+    yield
+
+    for i, v in enumerate(vars):
+        if old[i]:
+            os.environ[v] = old[i]
+
+
 def _sync_argv(argv):
     """Launch the module's main with given argv and check the result."""
     main(argv)
@@ -169,9 +184,19 @@ _sync_argv.__test__ = False
 def test_cli_args():
     """Test CLI arguments."""
     # Suppress STDERR
-    with capture_sys_output() as (stdout, stderr):
+    with capture_sys_output():
         assert_raises(SystemExit, _sync_argv, [])
         assert_raises(SystemExit, _sync_argv, [LOCAL_FOLDER])
+
+    with override_env_variables():
+        _sync_argv(
+            [LOCAL_FOLDER,
+             '127.0.0.1:' + '/' + REMOTE_FOLDER,
+             '-f',
+             '-k', t_path("id_rsa"),
+             '-p', "2222"
+             ],
+        )
 
     _sync_argv(
         [LOCAL_FOLDER,

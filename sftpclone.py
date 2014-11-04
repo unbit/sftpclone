@@ -13,6 +13,7 @@ import errno
 from stat import S_ISDIR, S_ISLNK, S_ISREG, S_IMODE, S_IFMT
 import argparse
 import logging
+from getpass import getuser
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -27,7 +28,12 @@ class SFTPClone(object):
     def __init__(self, local_path, remote_url, key=None, port=None, fix_symlinks=False):
         """Init the needed parameters and the SFTPClient."""
         self.local_path = os.path.realpath(local_path)
-        self.username, self.hostname = remote_url.split('@', 1)
+
+        if '@' in remote_url:
+            self.username, self.hostname = remote_url.split('@', 1)
+        else:
+            self.username, self.hostname = getuser(), remote_url  # default to current user
+
         self.hostname, self.remote_path = self.hostname.split(':', 1)
 
         self.password = None
@@ -342,7 +348,6 @@ def main(args=None):
     parser = create_parser()
 
     args = vars(parser.parse_args(args))
-    print(args)
     args_mapping = {
         "path": "local_path",
         "remote": "remote_url",
