@@ -13,7 +13,7 @@ import errno
 from stat import S_ISDIR, S_ISLNK, S_ISREG, S_IMODE, S_IFMT
 import argparse
 import logging
-from getpass import getuser
+from getpass import getuser, getpass
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -47,7 +47,13 @@ class SFTPClone(object):
 
         self.pkey = None
         if key:
-            self.pkey = paramiko.RSAKey.from_private_key_file(key)
+            try:
+                self.pkey = paramiko.RSAKey.from_private_key_file(key)
+            except paramiko.PasswordRequiredException:
+                pk_password = getpass(
+                    "It seems that your private key is encrypted. Please enter your password: "
+                )
+                self.pkey = paramiko.RSAKey.from_private_key_file(key, pk_password)
 
         # only root can change file owner
         if self.username == 'root':

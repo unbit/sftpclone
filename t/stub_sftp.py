@@ -29,14 +29,14 @@ from t.utils import t_path
 
 USERNAME = "test"
 PASSWORD = "secret"
-RSA_KEY = t_path("id_rsa")
+RSA_KEYS = (t_path("id_rsa"), t_path("encrypted_rsa"))
 
 SERVER_ROOT = "server_root"
 
 
 class StubServer (ServerInterface):
 
-    good_pub_key = RSAKey(filename=RSA_KEY)
+    good_pub_keys = [RSAKey(r) for r in RSA_KEYS]
 
     def check_auth_password(self, username, password):
         if username == USERNAME and password == PASSWORD:
@@ -44,7 +44,7 @@ class StubServer (ServerInterface):
         return AUTH_FAILED
 
     def check_auth_publickey(self, username, key):
-        if (username == USERNAME) and (key == self.good_pub_key):
+        if username == USERNAME and key in self.good_pub_keys:
             return AUTH_SUCCESSFUL
         return AUTH_FAILED
 
