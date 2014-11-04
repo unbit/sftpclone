@@ -26,8 +26,12 @@ import socket
 import select
 
 from nose import with_setup
+from nose.tools import assert_raises
+from contextlib import contextmanager
+from io import StringIO
+import sys
 
-from sftpclone import SFTPClone
+from sftpclone import SFTPClone, main
 
 
 REMOTE_ROOT = t_path("server_root")
@@ -110,7 +114,7 @@ def teardown_test():
 teardown_test.__test__ = False
 
 
-def _sync(password=None, fix=False):
+def _sync(password=False, fix=False):
     """Launch sync and do basic comparison of dir trees."""
     if not password:
         remote = 'test@127.0.0.1:' + '/' + REMOTE_FOLDER
@@ -121,7 +125,8 @@ def _sync(password=None, fix=False):
         LOCAL_FOLDER,
         remote,
         port=2222,
-        fix_symlinks=fix
+        fix_symlinks=fix,
+        key=t_path("id_rsa")
     )
     sync.run()
 
@@ -133,6 +138,56 @@ def _sync(password=None, fix=False):
             REMOTE_PATH
         )[REMOTE_FOLDER]
 _sync.__test__ = False
+
+
+@contextmanager
+def capture_sys_output():
+    """Capture standard output and error."""
+    caputure_out, capture_err = StringIO(), StringIO()
+    current_out, current_err = sys.stdout, sys.stderr
+    try:
+        sys.stdout, sys.stderr = caputure_out, capture_err
+        yield caputure_out, capture_err
+    finally:
+        sys.stdout, sys.stderr = current_out, current_err
+
+
+def _sync_argv(argv):
+    """Launch the module's main with given argv and check the result."""
+    main(argv)
+
+    assert \
+        file_tree(
+            LOCAL_FOLDER
+        )[LOCAL_FOLDER_NAME] == file_tree(
+            REMOTE_PATH
+        )[REMOTE_FOLDER]
+_sync_argv.__test__ = False
+
+
+@with_setup(setup_test, teardown_test)
+def test_cli_args():
+    """Test CLI arguments."""
+    # Suppress STDERR
+    with capture_sys_output() as (stdout, stderr):
+        assert_raises(SystemExit, _sync_argv, [])
+        assert_raises(SystemExit, _sync_argv, [LOCAL_FOLDER])
+
+    _sync_argv(
+        [LOCAL_FOLDER,
+         'test@127.0.0.1:' + '/' + REMOTE_FOLDER,
+         '-f',
+         '-k', t_path("id_rsa"),
+         '-p', "2222"
+         ],
+    )
+
+    _sync_argv(
+        [LOCAL_FOLDER,
+         'test:secret@127.0.0.1:' + '/' + REMOTE_FOLDER,
+         '-p', "2222"
+         ],
+    )
 
 
 @with_setup(setup_test, teardown_test)
@@ -194,10 +249,12 @@ def test_local_absolute_link():
     _sync(fix=True)
 
     for link_name, source in inside_symlinks.items():
-        assert os.readlink(join(REMOTE_PATH, link_name)) == join(REMOTE_PATH, source)
+        assert os.readlink(join(REMOTE_PATH, link_name)) == join(
+            REMOTE_PATH, source)
 
     for link_name, source in outside_symlinks.items():
-        assert os.readlink(join(REMOTE_PATH, link_name))[len(REMOTE_ROOT):] == source
+        assert os.readlink(join(REMOTE_PATH, link_name))[
+            len(REMOTE_ROOT):] == source
 
 
 @with_setup(setup_test, teardown_test)

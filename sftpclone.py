@@ -24,22 +24,22 @@ class SFTPClone(object):
 
     """The SFTPClone class."""
 
-    def __init__(self, local_path, remote_url, key=None, port=22, fix_symlinks=False):
+    def __init__(self, local_path, remote_url, key=None, port=None, fix_symlinks=False):
         """Init the needed parameters and the SFTPClient."""
         self.local_path = os.path.realpath(local_path)
         self.username, self.hostname = remote_url.split('@', 1)
         self.hostname, self.remote_path = self.hostname.split(':', 1)
-        self.password = None
 
+        self.password = None
         if ':' in self.username:
             self.username, self.password = self.username.split(':', 1)
 
-        self.port = port
+        self.port = port if port else 22
         self.chown = False
+
+        self.fix_symlinks = fix_symlinks if fix_symlinks else False
+
         self.pkey = None
-
-        self.fix_symlinks = fix_symlinks
-
         if key:
             self.pkey = paramiko.RSAKey.from_private_key_file(key)
 
@@ -292,25 +292,30 @@ class SFTPClone(object):
         self.check_for_upload_create()
 
 
-def main():
-    """The main."""
+def create_parser():
+    """Create the CLI argument parser."""
     parser = argparse.ArgumentParser(
-        description='Sync a local and a remote folder through SFTP.')
+        description='Sync a local and a remote folder through SFTP.'
+    )
+
     parser.add_argument(
-        "local",
+        "path",
         type=str,
-        help="the path of the local folder",
+        metavar="local-path",
+        help="The path of the local folder.",
     )
 
     parser.add_argument(
         "remote",
         type=str,
-        help="the ssh-url of the remote folder",
+        metavar="user[:password]@hostname:remote-path",
+        help="The ssh-url (user[:password]@hostname:remote-path) of the remote folder.",
     )
 
     parser.add_argument(
         "-k",
         "--key",
+        metavar="private-key-path",
         type=str,
         help="Private key identity path."
     )
@@ -318,25 +323,38 @@ def main():
     parser.add_argument(
         "-p",
         "--port",
+        default=22,
         type=int,
-        help="The remote port."
+        help="SSH remote port (defaults to 22)."
     )
 
     parser.add_argument(
         "-f",
-        "--fix_absolute_symlinks",
+        "--fix-symlinks",
         action="store_true",
-        help="Fix absolute symlinks on remote side."
+        help="Fix symbolic links on remote side."
     )
+    return parser
 
-    args = parser.parse_args()
+
+def main(args=None):
+    """The main."""
+    parser = create_parser()
+
+    args = vars(parser.parse_args(args))
+    print(args)
+    args_mapping = {
+        "path": "local_path",
+        "remote": "remote_url",
+        "port": "port",
+        "key": "key",
+        "fix_symlinks": "fix_symlinks",
+    }
+
+    kwargs = {args_mapping[k]: v for k, v in args.items() if v}
 
     sync = SFTPClone(
-        local_path=args.local,
-        remote_url=args.remote,
-        port=args.port,
-        key=args.key,
-        fix_symlinks=args.fix_absolute_symlinks
+        **kwargs
     )
     sync.run()
 
