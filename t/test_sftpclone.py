@@ -114,7 +114,7 @@ def teardown_test():
 teardown_test.__test__ = False
 
 
-def _sync(password=False, fix=False):
+def _sync(password=False, fix=False, exclude=None):
     """Launch sync and do basic comparison of dir trees."""
     if not password:
         remote = 'test@127.0.0.1:' + '/' + REMOTE_FOLDER
@@ -126,17 +126,19 @@ def _sync(password=False, fix=False):
         remote,
         port=2222,
         fix_symlinks=fix,
-        key=t_path("id_rsa")
+        key=t_path("id_rsa"),
+        exclude_file=exclude
     )
     sync.run()
 
-    # check the directory trees
-    assert \
-        file_tree(
-            LOCAL_FOLDER
-        )[LOCAL_FOLDER_NAME] == file_tree(
-            REMOTE_PATH
-        )[REMOTE_FOLDER]
+    if not exclude:
+        # check the directory trees
+        assert \
+            file_tree(
+                LOCAL_FOLDER
+            )[LOCAL_FOLDER_NAME] == file_tree(
+                REMOTE_PATH
+            )[REMOTE_FOLDER]
 _sync.__test__ = False
 
 
@@ -245,6 +247,39 @@ def test_remote_tilde_home():
         )[LOCAL_FOLDER_NAME] == file_tree(
             REMOTE_PATH
         )[REMOTE_FOLDER]
+
+
+@with_setup(setup_test, teardown_test)
+def test_exclude():
+    """Test pattern exclusion handling."""
+    exclused = {"foofolder"}
+    os.mkdir(join(LOCAL_FOLDER, "foofolder"))
+
+    exclused |= {"foo", "foofile"}
+    os.open(join(LOCAL_FOLDER, "file_one"), os.O_CREAT)
+    os.open(join(LOCAL_FOLDER, "file_two"), os.O_CREAT)
+    os.open(join(LOCAL_FOLDER, "foo"), os.O_CREAT)
+    os.open(join(LOCAL_FOLDER, "foofile"), os.O_CREAT)
+
+    _sync(exclude=t_path("exclude"))
+
+    assert not set(os.listdir(REMOTE_PATH)) & exclused
+
+
+@with_setup(setup_test, teardown_test)
+def test_inner_exclude():
+    """Test pattern exclusion (with recursion) handling."""
+    os.mkdir(join(LOCAL_FOLDER, "bar"))
+    os.mkdir(join(LOCAL_FOLDER, "bar", "inner"))
+
+    os.open(join(LOCAL_FOLDER, "bar", "file_one"), os.O_CREAT)
+    os.open(join(LOCAL_FOLDER, "bar", "inner", "foo"), os.O_CREAT)
+    os.open(join(LOCAL_FOLDER, "bar", "inner", "bar"), os.O_CREAT)
+
+    _sync(exclude=t_path("exclude"))
+
+    assert set(os.listdir(join(REMOTE_PATH, "bar"))) == {"file_one", "inner"}
+    assert set(os.listdir(join(REMOTE_PATH, "bar", "inner"))) == {"bar"}
 
 
 @with_setup(setup_test, teardown_test)

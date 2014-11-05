@@ -14,6 +14,9 @@ from stat import S_ISDIR, S_ISLNK, S_ISREG, S_IMODE, S_IFMT
 import argparse
 import logging
 from getpass import getuser, getpass
+import glob
+import socket
+from itertools import chain
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -27,9 +30,35 @@ class SFTPClone(object):
 
     def __init__(self, local_path, remote_url,
                  key=None, port=None, fix_symlinks=False,
-                 ssh_config_path=None):
+                 ssh_config_path=None, exclude_file=None):
         """Init the needed parameters and the SFTPClient."""
         self.local_path = os.path.realpath(os.path.expanduser(local_path))
+
+        if not os.path.exists(self.local_path):
+            logging.error("Local path MUST exist. Exiting.")
+            sys.exit(1)
+
+        if exclude_file:
+            with open(exclude_file) as f:
+                # As in rsync's exclude from, ignore lines with leading ; and #
+                # and treat each path as relative (thus by removing the leading /)
+                exclude_list = [
+                    line.rstrip().lstrip("/")
+                    for line in f
+                    if not line.startswith((";", "#"))
+                ]
+
+                self.exclude_list = {
+                    g
+                        for pattern in exclude_list
+                        for g in glob.glob(join(self.local_path, pattern))
+                }
+
+                # flatten the list into a set
+                # self.exclude_list = set(chain(*self.exclude_list))
+                logging.debug(self.exclude_list)
+        else:
+            self.exclude_list = set()
 
         if '@' in remote_url:
             self.username, self.hostname = remote_url.split('@', 1)
@@ -45,18 +74,15 @@ class SFTPClone(object):
         self.port = None
 
         if ssh_config_path:
-            ssh_config_path = os.path.expanduser(ssh_config_path)
+            with open(os.path.expanduser(ssh_config_path)) as c_file:
+                ssh_config = paramiko.SSHConfig()
+                ssh_config.parse(c_file)
+                c = ssh_config.lookup(self.hostname)
 
-            if os.path.exists(ssh_config_path):
-                with open(ssh_config_path) as c_file:
-                    ssh_config = paramiko.SSHConfig()
-                    ssh_config.parse(c_file)
-                    c = ssh_config.lookup(self.hostname)
-
-                    self.hostname = c.get("hostname", self.hostname)
-                    self.username = c.get("user", self.username)
-                    self.port = int(c.get("port", port))
-                    key = c.get("identityfile", key)
+                self.hostname = c.get("hostname", self.hostname)
+                self.username = c.get("user", self.username)
+                self.port = int(c.get("port", port))
+                key = c.get("identityfile", key)
 
         # Set default values
         if not self.username:
@@ -77,19 +103,30 @@ class SFTPClone(object):
                 pk_password = getpass(
                     "It seems that your private key is encrypted. Please enter your password: "
                 )
-                self.pkey = paramiko.RSAKey.from_private_key_file(
-                    key, pk_password)
+                try:
+                    self.pkey = paramiko.RSAKey.from_private_key_file(
+                        key, pk_password)
+                except paramiko.ssh_exception.SSHException:
+                    logging.error(
+                        "Incorrect passphrase. Cannot decode private key."
+                    )
+                    sys.exit(1)
         elif not key and not self.password:
             logging.error(
                 "You need to specify a password or an identity."
             )
-            sys.exit()
+            sys.exit(1)
 
         # only root can change file owner
         if self.username == 'root':
             self.chown = True
 
-        self.transport = paramiko.Transport((self.hostname, self.port))
+        try:
+            self.transport = paramiko.Transport((self.hostname, self.port))
+        except socket.gaierror:
+            logging.error("Hostname not known. Are you sure you inserted it correctly?")
+            sys.exit(1)
+
         self.transport.connect(
             username=self.username,
             password=self.password,
@@ -185,7 +222,7 @@ class SFTPClone(object):
 
     def create_update_symlink(self, link_destination, remote_path):
         """Create a new link pointing to link_destination in remote_path position."""
-        logging.debug("Linking {} to {}".format(remote_path, link_destination))
+        # logging.debug("Linking {} to {}".format(remote_path, link_destination))
 
         try:
             try:  # check if the remote link exists
@@ -212,6 +249,10 @@ class SFTPClone(object):
         # the (absolute) local address of f.
         local_path = join(self.local_path, relative_path, f)
         l_st = os.lstat(local_path)
+
+        if (local_path) in self.exclude_list:
+            logging.info("Skipping excluded file %s.", local_path)
+            return
 
         # the (absolute) remote address of f.
         remote_path = join(self.remote_path, relative_path, f)
@@ -251,15 +292,6 @@ class SFTPClone(object):
                 relative_link = absolute_local_link[len(trailing_local_path):]
             else:
                 relative_link = None
-
-            logging.debug(
-                "TAG: %s %s %s %s %s",
-                local_link,
-                absolute_local_link,
-                self.local_path,
-                is_absolute,
-                relpath,
-            )
 
             """
             # Refactor them all, be efficient!
@@ -318,7 +350,7 @@ class SFTPClone(object):
 
         # Anything else.
         else:
-            logging.error("UNSUPPORTED", local_path)
+            logging.warning("Skipping unsupported file %s.", local_path)
 
     def check_for_upload_create(self, relative_path=None):
         """Traverse the relative_path tree and check for files that need to be uploaded/created.
@@ -351,16 +383,16 @@ def create_parser():
         "path",
         type=str,
         metavar="local-path",
-        help="The path of the local folder.",
+        help="the path of the local folder",
     )
 
     parser.add_argument(
         "remote",
         type=str,
         metavar="user[:password]@hostname:remote-path",
-        help="The ssh-url (user[:password]@hostname:remote-path) of the remote folder. "
+        help="the ssh-url (user[:password]@hostname:remote-path) of the remote folder. "
              "The hostname can be specified as a ssh_config's hostname too. "
-             "Every missing information will be gathered from there.",
+             "Every missing information will be gathered from there",
     )
 
     parser.add_argument(
@@ -369,7 +401,7 @@ def create_parser():
         metavar="private-key-path",
         default="~/.ssh/id_rsa",
         type=str,
-        help="Private key identity path (defaults to ~/.ssh/id_rsa)."
+        help="private key identity path (defaults to ~/.ssh/id_rsa."
     )
 
     parser.add_argument(
@@ -377,14 +409,14 @@ def create_parser():
         "--port",
         default=22,
         type=int,
-        help="SSH remote port (defaults to 22)."
+        help="SSH remote port (defaults to 22."
     )
 
     parser.add_argument(
         "-f",
         "--fix-symlinks",
         action="store_true",
-        help="Fix symbolic links on remote side."
+        help="fix symbolic links on remote sid."
     )
 
     parser.add_argument(
@@ -393,7 +425,15 @@ def create_parser():
         metavar="ssh-config-path",
         default="~/.ssh/config",
         type=str,
-        help="Path of the ssh-configuration file."
+        help="path of the ssh-configuration fil."
+    )
+
+    parser.add_argument(
+        "-e",
+        "--exclude-from",
+        metavar="exlude-from-file-path",
+        type=str,
+        help="exclude files matching pattern in exlude-from-file-pat."
     )
     return parser
 
@@ -410,6 +450,7 @@ def main(args=None):
         "key": "key",
         "fix_symlinks": "fix_symlinks",
         "ssh_config": "ssh_config_path",
+        "exclude_from": "exclude_file"
     }
 
     kwargs = {args_mapping[k]: v for k, v in args.items() if v}
