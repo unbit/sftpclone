@@ -96,6 +96,10 @@ class SFTPClone(object):
             pkey=self.pkey)
         self.sftp = paramiko.SFTPClient.from_transport(self.transport)
 
+        if (self.remote_path.startswith("~")):
+            self.sftp.chdir('.')  # nasty hack to let getcwd work without changing dir!
+            self.remote_path = self.remote_path.replace("~", self.sftp.getcwd())  # home is the initial sftp dir
+
     def _file_need_upload(self, l_st, r_st):
         return True if \
             (l_st.st_size != r_st.st_size) or (int(l_st.st_mtime) != r_st.st_mtime) \

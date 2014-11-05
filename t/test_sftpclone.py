@@ -224,6 +224,30 @@ def test_cli_args():
 
 
 @with_setup(setup_test, teardown_test)
+def test_remote_tilde_home():
+    """Test tilde expansion on remote end."""
+    normal_files = ("bar", "bis")  # just to add noise
+    for f in normal_files:
+        os.open(join(LOCAL_FOLDER, f), os.O_CREAT)
+        os.open(join(REMOTE_PATH, f), os.O_CREAT)
+
+    sync = SFTPClone(
+        LOCAL_FOLDER,
+        remote_url='test@127.0.0.1:' + '~' + REMOTE_FOLDER,
+        port=2222,
+        key=t_path("id_rsa")
+    )
+    sync.run()
+
+    assert \
+        file_tree(
+            LOCAL_FOLDER
+        )[LOCAL_FOLDER_NAME] == file_tree(
+            REMOTE_PATH
+        )[REMOTE_FOLDER]
+
+
+@with_setup(setup_test, teardown_test)
 def test_local_relative_link():
     """Test relative links creation/update (cases C/D)."""
     old_cwd = os.getcwd()
