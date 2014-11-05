@@ -214,6 +214,14 @@ def test_cli_args():
          ],
     )
 
+    _sync_argv(
+        [LOCAL_FOLDER,
+         'backup:' + '/' + REMOTE_FOLDER,
+         '-c', t_path("config"),
+         '-k', t_path("id_rsa"),  # hard to insert relative path in cfg, so we have to cheat
+         ],
+    )
+
 
 @with_setup(setup_test, teardown_test)
 def test_local_relative_link():

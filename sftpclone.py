@@ -7,8 +7,8 @@ from __future__ import absolute_import
 
 import paramiko
 import os
-import os.path
 from os.path import join
+import sys
 import errno
 from stat import S_ISDIR, S_ISLNK, S_ISREG, S_IMODE, S_IFMT
 import argparse
@@ -25,35 +25,65 @@ class SFTPClone(object):
 
     """The SFTPClone class."""
 
-    def __init__(self, local_path, remote_url, key=None, port=None, fix_symlinks=False):
+    def __init__(self, local_path, remote_url,
+                 key=None, port=None, fix_symlinks=False,
+                 ssh_config_path=None):
         """Init the needed parameters and the SFTPClient."""
-        self.local_path = os.path.realpath(local_path)
+        self.local_path = os.path.realpath(os.path.expanduser(local_path))
 
         if '@' in remote_url:
             self.username, self.hostname = remote_url.split('@', 1)
         else:
-            self.username, self.hostname = getuser(), remote_url  # default to current user
+            self.username, self.hostname = None, remote_url
 
         self.hostname, self.remote_path = self.hostname.split(':', 1)
 
         self.password = None
-        if ':' in self.username:
+        if self.username and ':' in self.username:
             self.username, self.password = self.username.split(':', 1)
 
-        self.port = port if port else 22
-        self.chown = False
+        self.port = None
 
+        if ssh_config_path:
+            ssh_config_path = os.path.expanduser(ssh_config_path)
+
+            if os.path.exists(ssh_config_path):
+                with open(ssh_config_path) as c_file:
+                    ssh_config = paramiko.SSHConfig()
+                    ssh_config.parse(c_file)
+                    c = ssh_config.lookup(self.hostname)
+
+                    self.hostname = c.get("hostname", self.hostname)
+                    self.username = c.get("user", self.username)
+                    self.port = int(c.get("port", port))
+                    key = c.get("identityfile", key)
+
+        # Set default values
+        if not self.username:
+            self.username = getuser()  # defaults to current user
+
+        if not self.port:
+            self.port = port if port else 22
+
+        self.chown = False
         self.fix_symlinks = fix_symlinks if fix_symlinks else False
 
         self.pkey = None
-        if key:
+        if key and not self.password:
+            key = os.path.expanduser(key)
             try:
                 self.pkey = paramiko.RSAKey.from_private_key_file(key)
             except paramiko.PasswordRequiredException:
                 pk_password = getpass(
                     "It seems that your private key is encrypted. Please enter your password: "
                 )
-                self.pkey = paramiko.RSAKey.from_private_key_file(key, pk_password)
+                self.pkey = paramiko.RSAKey.from_private_key_file(
+                    key, pk_password)
+        elif not key and not self.password:
+            logging.error(
+                "You need to specify a password or an identity."
+            )
+            sys.exit()
 
         # only root can change file owner
         if self.username == 'root':
@@ -163,9 +193,11 @@ class SFTPClone(object):
                     self.sftp.symlink(link_destination, remote_path)
             except IOError:  # if not, create it and done!
                 self.sftp.symlink(link_destination, remote_path)
-        except OSError as e:  # sometimes symlinking fails if absolute path are "too" different
+        # sometimes symlinking fails if absolute path are "too" different
+        except OSError as e:
         # Sadly, nothing we can do about it.
-            logging.error("error while symlinking {} to {}: {}".format(remote_path, link_destination, e))
+            logging.error("error while symlinking {} to {}: {}".format(
+                remote_path, link_destination, e))
 
     def node_check_for_upload_create(self, relative_path, f):
         """Check if the given directory tree node has to be uploaded/created on the remote folder."""
@@ -204,7 +236,8 @@ class SFTPClone(object):
             # is it absolute?
             is_absolute = local_link.startswith("/")
             # and does it point inside the shared directory?
-            trailing_local_path = join(self.local_path, '')  # add trailing slash (security)
+            # add trailing slash (security)
+            trailing_local_path = join(self.local_path, '')
             relpath = os.path.commonprefix(
                 [absolute_local_link,
                  trailing_local_path]
@@ -321,15 +354,18 @@ def create_parser():
         "remote",
         type=str,
         metavar="user[:password]@hostname:remote-path",
-        help="The ssh-url (user[:password]@hostname:remote-path) of the remote folder.",
+        help="The ssh-url (user[:password]@hostname:remote-path) of the remote folder. "
+             "The hostname can be specified as a ssh_config's hostname too. "
+             "Every missing information will be gathered from there.",
     )
 
     parser.add_argument(
         "-k",
         "--key",
         metavar="private-key-path",
+        default="~/.ssh/id_rsa",
         type=str,
-        help="Private key identity path."
+        help="Private key identity path (defaults to ~/.ssh/id_rsa)."
     )
 
     parser.add_argument(
@@ -346,6 +382,15 @@ def create_parser():
         action="store_true",
         help="Fix symbolic links on remote side."
     )
+
+    parser.add_argument(
+        "-c",
+        "--ssh-config",
+        metavar="ssh-config-path",
+        default="~/.ssh/config",
+        type=str,
+        help="Path of the ssh-configuration file."
+    )
     return parser
 
 
@@ -360,6 +405,7 @@ def main(args=None):
         "port": "port",
         "key": "key",
         "fix_symlinks": "fix_symlinks",
+        "ssh_config": "ssh_config_path",
     }
 
     kwargs = {args_mapping[k]: v for k, v in args.items() if v}

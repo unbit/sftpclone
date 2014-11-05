@@ -1,0 +1,4 @@
+Host backup
+	Hostname 127.0.0.1
+	Port 2222
+	User test
