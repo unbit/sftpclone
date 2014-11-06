@@ -16,7 +16,6 @@ import logging
 from getpass import getuser, getpass
 import glob
 import socket
-from itertools import chain
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -390,7 +389,7 @@ def create_parser():
         "remote",
         type=str,
         metavar="user[:password]@hostname:remote-path",
-        help="the ssh-url (user[:password]@hostname:remote-path) of the remote folder. "
+        help="the ssh-url ([user[:password]@]hostname:remote-path) of the remote folder. "
              "The hostname can be specified as a ssh_config's hostname too. "
              "Every missing information will be gathered from there",
     )
@@ -401,7 +400,7 @@ def create_parser():
         metavar="private-key-path",
         default="~/.ssh/id_rsa",
         type=str,
-        help="private key identity path (defaults to ~/.ssh/id_rsa."
+        help="private key identity path (defaults to ~/.ssh/id_rsa)"
     )
 
     parser.add_argument(
@@ -409,14 +408,14 @@ def create_parser():
         "--port",
         default=22,
         type=int,
-        help="SSH remote port (defaults to 22."
+        help="SSH remote port (defaults to 22)"
     )
 
     parser.add_argument(
         "-f",
         "--fix-symlinks",
         action="store_true",
-        help="fix symbolic links on remote sid."
+        help="fix symbolic links on remote side"
     )
 
     parser.add_argument(
@@ -425,7 +424,7 @@ def create_parser():
         metavar="ssh-config-path",
         default="~/.ssh/config",
         type=str,
-        help="path of the ssh-configuration fil."
+        help="path of the ssh-configuration file"
     )
 
     parser.add_argument(
@@ -433,7 +432,7 @@ def create_parser():
         "--exclude-from",
         metavar="exlude-from-file-path",
         type=str,
-        help="exclude files matching pattern in exlude-from-file-pat."
+        help="exclude files matching pattern in exclude-from-file-path"
     )
     return parser
 
