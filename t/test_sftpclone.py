@@ -29,8 +29,13 @@ import select
 from nose import with_setup
 from nose.tools import assert_raises
 from contextlib import contextmanager
-from io import StringIO
+
 import sys
+# unicode / string differentiation
+if sys.version_info > (3, 0):
+    from io import StringIO
+else:
+    from StringIO import StringIO
 
 from sftpclone import SFTPClone, main
 
