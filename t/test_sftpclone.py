@@ -18,6 +18,7 @@ from os.path import join
 from shutil import rmtree, copy
 import random
 from stat import S_ISDIR
+import logging
 
 import paramiko
 from t.stub_sftp import StubServer, StubSFTPServer
@@ -42,6 +43,12 @@ LOCAL_FOLDER_NAME = "local_folder"
 LOCAL_FOLDER = t_path(LOCAL_FOLDER_NAME)
 
 event = threading.Event()
+
+# attach existing loggers (use --nologcapture option to see output)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 
 def _start_sftp_server():
@@ -106,8 +113,8 @@ setup_test.__test__ = False
 
 def teardown_test():
     """Clean the created directories."""
-    list_files(LOCAL_FOLDER)
-    list_files(REMOTE_PATH)
+    logging.info(list_files(LOCAL_FOLDER))
+    logging.info(list_files(REMOTE_PATH))
 
     rmtree(REMOTE_PATH, ignore_errors=True)
     rmtree(LOCAL_FOLDER, ignore_errors=True)

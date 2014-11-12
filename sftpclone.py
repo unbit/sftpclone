@@ -17,10 +17,19 @@ from getpass import getuser, getpass
 import glob
 import socket
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+logger = None
+
+
+def configure_logging(level=logging.DEBUG):
+    """Configure the module logging engine."""
+    logger = logging.getLogger(__name__)
+    logger.setLevel(level)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    ch = logging.StreamHandler()
+    ch.setLevel(level)
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+    return logger
 
 
 class SFTPClone(object):
@@ -32,30 +41,29 @@ class SFTPClone(object):
                  ssh_config_path=None, exclude_file=None):
         """Init the needed parameters and the SFTPClient."""
         self.local_path = os.path.realpath(os.path.expanduser(local_path))
+        self.logger = logger or configure_logging()
 
         if not os.path.exists(self.local_path):
-            logging.error("Local path MUST exist. Exiting.")
+            self.logger.error("Local path MUST exist. Exiting.")
             sys.exit(1)
 
         if exclude_file:
             with open(exclude_file) as f:
                 # As in rsync's exclude from, ignore lines with leading ; and #
-                # and treat each path as relative (thus by removing the leading /)
+                # and treat each path as relative (thus by removing the leading
+                # /)
                 exclude_list = [
                     line.rstrip().lstrip("/")
                     for line in f
                     if not line.startswith((";", "#"))
                 ]
 
+                # actually, is a set of excluded files
                 self.exclude_list = {
                     g
-                        for pattern in exclude_list
-                        for g in glob.glob(join(self.local_path, pattern))
+                    for pattern in exclude_list
+                    for g in glob.glob(join(self.local_path, pattern))
                 }
-
-                # flatten the list into a set
-                # self.exclude_list = set(chain(*self.exclude_list))
-                logging.debug(self.exclude_list)
         else:
             self.exclude_list = set()
 
@@ -106,12 +114,12 @@ class SFTPClone(object):
                     self.pkey = paramiko.RSAKey.from_private_key_file(
                         key, pk_password)
                 except paramiko.ssh_exception.SSHException:
-                    logging.error(
+                    self.logger.error(
                         "Incorrect passphrase. Cannot decode private key."
                     )
                     sys.exit(1)
         elif not key and not self.password:
-            logging.error(
+            self.logger.error(
                 "You need to specify a password or an identity."
             )
             sys.exit(1)
@@ -123,7 +131,8 @@ class SFTPClone(object):
         try:
             self.transport = paramiko.Transport((self.hostname, self.port))
         except socket.gaierror:
-            logging.error("Hostname not known. Are you sure you inserted it correctly?")
+            self.logger.error(
+                "Hostname not known. Are you sure you inserted it correctly?")
             sys.exit(1)
 
         self.transport.connect(
@@ -133,8 +142,10 @@ class SFTPClone(object):
         self.sftp = paramiko.SFTPClient.from_transport(self.transport)
 
         if (self.remote_path.startswith("~")):
-            self.sftp.chdir('.')  # nasty hack to let getcwd work without changing dir!
-            self.remote_path = self.remote_path.replace("~", self.sftp.getcwd())  # home is the initial sftp dir
+            # nasty hack to let getcwd work without changing dir!
+            self.sftp.chdir('.')
+            self.remote_path = self.remote_path.replace(
+                "~", self.sftp.getcwd())  # home is the initial sftp dir
 
     def _file_need_upload(self, l_st, r_st):
         return True if \
@@ -183,7 +194,7 @@ class SFTPClone(object):
             try:
                 self.sftp.remove(remote_path)
             except FileNotFoundError as e:
-                logging.error(
+                self.logger.error(
                     "error while removing {}. trace: {}".format(remote_path, e)
                 )
 
@@ -221,8 +232,6 @@ class SFTPClone(object):
 
     def create_update_symlink(self, link_destination, remote_path):
         """Create a new link pointing to link_destination in remote_path position."""
-        # logging.debug("Linking {} to {}".format(remote_path, link_destination))
-
         try:
             try:  # check if the remote link exists
                 remote_link = self.sftp.readlink(remote_path)
@@ -236,7 +245,7 @@ class SFTPClone(object):
         # sometimes symlinking fails if absolute path are "too" different
         except OSError as e:
         # Sadly, nothing we can do about it.
-            logging.error("error while symlinking {} to {}: {}".format(
+            self.logger.error("error while symlinking {} to {}: {}".format(
                 remote_path, link_destination, e))
 
     def node_check_for_upload_create(self, relative_path, f):
@@ -250,7 +259,7 @@ class SFTPClone(object):
         l_st = os.lstat(local_path)
 
         if (local_path) in self.exclude_list:
-            logging.info("Skipping excluded file %s.", local_path)
+            self.logger.info("Skipping excluded file %s.", local_path)
             return
 
         # the (absolute) remote address of f.
@@ -349,7 +358,7 @@ class SFTPClone(object):
 
         # Anything else.
         else:
-            logging.warning("Skipping unsupported file %s.", local_path)
+            self.logger.warning("Skipping unsupported file %s.", local_path)
 
     def check_for_upload_create(self, relative_path=None):
         """Traverse the relative_path tree and check for files that need to be uploaded/created.
@@ -404,6 +413,19 @@ def create_parser():
     )
 
     parser.add_argument(
+        "-l",
+        "--logging",
+        choices=['CRITICAL',
+                 'ERROR',
+                 'WARNING',
+                 'INFO',
+                 'DEBUG',
+                 'NOTSET'],
+        default='ERROR',
+        help="set logging level"
+    )
+
+    parser.add_argument(
         "-p",
         "--port",
         default=22,
@@ -430,7 +452,7 @@ def create_parser():
     parser.add_argument(
         "-e",
         "--exclude-from",
-        metavar="exlude-from-file-path",
+        metavar="exclude-from-file-path",
         type=str,
         help="exclude files matching pattern in exclude-from-file-path"
     )
@@ -442,6 +464,20 @@ def main(args=None):
     parser = create_parser()
 
     args = vars(parser.parse_args(args))
+
+    log_mapping = {
+        'CRITICAL': logging.CRITICAL,
+        'ERROR': logging.ERROR,
+        'WARNING': logging.WARNING,
+        'INFO': logging.INFO,
+        'DEBUG': logging.DEBUG,
+        'NOTSET': logging.NOTSET,
+    }
+    log_level = log_mapping[args['logging']]
+
+    global logger
+    logger = configure_logging(log_level)
+
     args_mapping = {
         "path": "local_path",
         "remote": "remote_url",
@@ -452,7 +488,7 @@ def main(args=None):
         "exclude_from": "exclude_file"
     }
 
-    kwargs = {args_mapping[k]: v for k, v in args.items() if v}
+    kwargs = {args_mapping[k]: v for k, v in args.items() if v and k != 'logging'}
 
     sync = SFTPClone(
         **kwargs
