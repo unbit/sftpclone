@@ -17,7 +17,7 @@ A tool for cloning/syncing a local directory tree with an SFTP server.
 ```
 usage: sftpclone.py [-h] [-k private-key-path]
                     [-l {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}] [-p PORT]
-                    [-f] [-c ssh-config-path] [-e exclude-from-file-path]
+                    [-f] [-a] [-c ssh-config-path] [-e exclude-from-file-path]
                     local-path user[:password]@hostname:remote-path
 ```
 
@@ -30,6 +30,7 @@ Where, for each command line argument:
 * **[l]ogging**: set the log level (ERROR by default).
 * **[p]ort**: SSH remote port (defaults to 22).
 * **[f]ix-symlinks**: if you have absolute symlinks pointing to your synced directory, they will remain consistent on the remote server: i.e., they will have an absolute path that reflect the path of the cloned directory on the server. Useful for cluster configurations.
+* **ssh-[a]gent**: enable ssh-agent support. Any private-[k]ey-path argument will be ignored.
 * **ssh-[c]onfig-path**: in the sftp-url's hostname you can [specify an entry of your `ssh_config` file](#ssh_config-compatibility). If you are using a non-standard path, you can set it here.
 * **[e]xclude-from-file-path**: the path to a file containing a list of patterns. Each file matched by these pattern [will be ignored](#exclude-list) (not synced).
 

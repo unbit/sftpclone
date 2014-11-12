@@ -27,7 +27,7 @@ import socket
 import select
 
 from nose import with_setup
-from nose.tools import assert_raises
+from nose.tools import assert_raises, raises
 from contextlib import contextmanager
 
 import sys
@@ -126,7 +126,7 @@ def teardown_test():
 teardown_test.__test__ = False
 
 
-def _sync(password=False, fix=False, exclude=None):
+def _sync(password=False, fix=False, exclude=None, ssh_agent=False):
     """Launch sync and do basic comparison of dir trees."""
     if not password:
         remote = 'test@127.0.0.1:' + '/' + REMOTE_FOLDER
@@ -139,7 +139,8 @@ def _sync(password=False, fix=False, exclude=None):
         port=2222,
         fix_symlinks=fix,
         key=t_path("id_rsa"),
-        exclude_file=exclude
+        exclude_file=exclude,
+        ssh_agent=ssh_agent
     )
     sync.run()
 
@@ -259,6 +260,15 @@ def test_remote_tilde_home():
         )[LOCAL_FOLDER_NAME] == file_tree(
             REMOTE_PATH
         )[REMOTE_FOLDER]
+
+
+@with_setup(setup_test, teardown_test)
+@raises(SystemExit)
+def test_ssh_agent():
+    """Test ssh_agent."""
+    # Suppress STDERR
+    with capture_sys_output():
+        _sync(ssh_agent=True)
 
 
 @with_setup(setup_test, teardown_test)

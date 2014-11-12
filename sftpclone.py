@@ -46,7 +46,8 @@ class SFTPClone(object):
 
     def __init__(self, local_path, remote_url,
                  key=None, port=None, fix_symlinks=False,
-                 ssh_config_path=None, exclude_file=None):
+                 ssh_config_path=None, ssh_agent=False,
+                 exclude_file=None):
         """Init the needed parameters and the SFTPClient."""
         self.local_path = os.path.realpath(os.path.expanduser(local_path))
         self.logger = logger or configure_logging()
@@ -116,26 +117,49 @@ class SFTPClone(object):
         self.chown = False
         self.fix_symlinks = fix_symlinks if fix_symlinks else False
 
-        self.pkey = None
-        if key and not self.password:
+        self.pkeys = list()
+        if ssh_agent:
+            try:
+                agent = paramiko.agent.Agent()
+                self.pkeys.append(*agent.get_keys())
+
+                if not self.pkeys:
+                    agent.close()
+                    self.logger.error(
+                        "SSH agent didn't provide any valid key. Trying to continue..."
+                    )
+
+            except paramiko.SSHException:
+                agent.close()
+                self.logger.error("SSH agent speaks a non-compatible protocol. Ignoring it.")
+
+        if key and not self.password and not self.pkeys:
             key = os.path.expanduser(key)
             try:
-                self.pkey = paramiko.RSAKey.from_private_key_file(key)
+                self.pkeys.append(paramiko.RSAKey.from_private_key_file(key))
             except paramiko.PasswordRequiredException:
                 pk_password = getpass(
                     "It seems that your private key is encrypted. Please enter your password: "
                 )
                 try:
-                    self.pkey = paramiko.RSAKey.from_private_key_file(
-                        key, pk_password)
+                    self.pkeys.append(
+                        paramiko.RSAKey.from_private_key_file(
+                            key, pk_password
+                        )
+                    )
                 except paramiko.ssh_exception.SSHException:
                     self.logger.error(
                         "Incorrect passphrase. Cannot decode private key."
                     )
                     sys.exit(1)
-        elif not key and not self.password:
+            except Exception:
+                self.logger.error(
+                    "Something went wrong while opening {}. Exiting.".format(key)
+                )
+                sys.exit(1)
+        elif not key and not self.password and not self.pkeys:
             self.logger.error(
-                "You need to specify a password or an identity."
+                "You need to specify either a password, an identity or to enable the ssh-agent support."
             )
             sys.exit(1)
 
@@ -150,10 +174,38 @@ class SFTPClone(object):
                 "Hostname not known. Are you sure you inserted it correctly?")
             sys.exit(1)
 
-        self.transport.connect(
-            username=self.username,
-            password=self.password,
-            pkey=self.pkey)
+        try:
+            self.transport.start_client()
+            # TODO: known-host check!
+            # pubK = self.transport.get_remote_server_key()
+            if self.password:
+                self.transport.auth_password(
+                    username=self.username,
+                    password=self.password
+                )
+            else:
+                for pkey in self.pkeys:
+                    try:
+                        self.transport.auth_publickey(
+                            username=self.username,
+                            key=pkey
+                        )
+                        break
+                    except paramiko.SSHException as e:
+                        self.logger.warning(
+                            "Authentication with identity {}... failed".format(
+                                pkey.get_base64()[:10]
+                            )
+                        )
+                else:  # none of the keys worked
+                    raise paramiko.SSHException
+        except paramiko.SSHException:
+            self.logger.error(
+                "None of the provided authentication methods worked. Exiting."
+            )
+            self.transport.close()
+            sys.exit(1)
+
         self.sftp = paramiko.SFTPClient.from_transport(self.transport)
 
         if (self.remote_path.startswith("~")):
@@ -257,11 +309,15 @@ class SFTPClone(object):
                     self.sftp.symlink(link_destination, remote_path)
             except IOError:  # if not, create it and done!
                 self.sftp.symlink(link_destination, remote_path)
-        # sometimes symlinking fails if absolute path are "too" different
+
+        # Sometimes symlinking fails if absolute path are "too" different
         except OSError as e:
         # Sadly, nothing we can do about it.
             self.logger.error("error while symlinking {} to {}: {}".format(
                 remote_path, link_destination, e))
+        # TODO
+        # except IOError:
+        #     self.create_update_symlink(link_destination, remote_path)
 
     def node_check_for_upload_create(self, relative_path, f):
         """Check if the given directory tree node has to be uploaded/created on the remote folder."""
@@ -456,6 +512,13 @@ def create_parser():
     )
 
     parser.add_argument(
+        "-a",
+        "--ssh-agent",
+        action="store_true",
+        help="enable ssh-agent support"
+    )
+
+    parser.add_argument(
         "-c",
         "--ssh-config",
         metavar="ssh-config-path",
@@ -489,6 +552,7 @@ def main(args=None):
         'NOTSET': logging.NOTSET,
     }
     log_level = log_mapping[args['logging']]
+    del(args['logging'])
 
     global logger
     logger = configure_logging(log_level)
@@ -496,14 +560,21 @@ def main(args=None):
     args_mapping = {
         "path": "local_path",
         "remote": "remote_url",
-        "port": "port",
-        "key": "key",
-        "fix_symlinks": "fix_symlinks",
         "ssh_config": "ssh_config_path",
-        "exclude_from": "exclude_file"
+        "exclude_from": "exclude_file",
     }
 
-    kwargs = {args_mapping[k]: v for k, v in args.items() if v and k != 'logging'}
+    kwargs = {  # convert the argument names to class constructor parameters
+        args_mapping[k]: v
+        for k, v in args.items()
+        if v and k in args_mapping
+    }
+
+    kwargs.update({
+        k: v
+        for k, v in args.items()
+        if v and k not in args_mapping
+    })
 
     sync = SFTPClone(
         **kwargs
