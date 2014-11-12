@@ -81,15 +81,22 @@ class SFTPClone(object):
         self.port = None
 
         if ssh_config_path:
-            with open(os.path.expanduser(ssh_config_path)) as c_file:
-                ssh_config = paramiko.SSHConfig()
-                ssh_config.parse(c_file)
-                c = ssh_config.lookup(self.hostname)
+            try:
+                with open(os.path.expanduser(ssh_config_path)) as c_file:
+                    ssh_config = paramiko.SSHConfig()
+                    ssh_config.parse(c_file)
+                    c = ssh_config.lookup(self.hostname)
 
-                self.hostname = c.get("hostname", self.hostname)
-                self.username = c.get("user", self.username)
-                self.port = int(c.get("port", port))
-                key = c.get("identityfile", key)
+                    self.hostname = c.get("hostname", self.hostname)
+                    self.username = c.get("user", self.username)
+                    self.port = int(c.get("port", port))
+                    key = c.get("identityfile", key)
+            except Exception as e:
+                # it could be safe to continue anyway,
+                # because parameters could have been manually specified
+                self.logger.error(
+                    "Error while parsing ssh_config file: %s. Trying to continue anyway...", e
+                )
 
         # Set default values
         if not self.username:
