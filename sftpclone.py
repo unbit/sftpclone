@@ -47,7 +47,7 @@ class SFTPClone(object):
     def __init__(self, local_path, remote_url,
                  key=None, port=None, fix_symlinks=False,
                  ssh_config_path=None, ssh_agent=False,
-                 exclude_file=None):
+                 exclude_file=None, known_hosts_path=None):
         """Init the needed parameters and the SFTPClient."""
         self.local_path = os.path.realpath(os.path.expanduser(local_path))
         self.logger = logger or configure_logging()
@@ -176,8 +176,34 @@ class SFTPClone(object):
 
         try:
             self.transport.start_client()
-            # TODO: known-host check!
-            # pubK = self.transport.get_remote_server_key()
+
+            if known_hosts_path:
+                known_hosts = paramiko.HostKeys()
+                known_hosts_path = os.path.realpath(os.path.expanduser(known_hosts_path))
+
+                try:
+                    known_hosts.load(known_hosts_path)
+                except IOError:
+                    self.logger.error(
+                        "Error while loading known hosts file at {}. Exiting...".format(known_hosts_path)
+                    )
+                    sys.exit(1)
+
+                ssh_host = self.hostname if self.port == 22 else "[{}]:{}".format(self.hostname, self.port)
+                pubK = self.transport.get_remote_server_key()
+                if ssh_host in known_hosts.keys() and not known_hosts.check(ssh_host, pubK):
+                    self.logger.error(
+                        "Security warning: "
+                        "remote key fingerprint {} for hostname "
+                        "{} didn't match the one in known_hosts {}. "
+                        "Exiting...".format(
+                            pubK.get_base64(),
+                            ssh_host,
+                            known_hosts.lookup(self.hostname),
+                        )
+                    )
+                    sys.exit(1)
+
             if self.password:
                 self.transport.auth_password(
                     username=self.username,
@@ -316,7 +342,7 @@ class SFTPClone(object):
         # Sadly, nothing we can do about it.
             self.logger.error("error while symlinking {} to {}: {}".format(
                 remote_path, link_destination, e))
-        # TODO
+        # Possibile FIXME!
         # except IOError:
         #     self.create_update_symlink(link_destination, remote_path)
 
@@ -447,7 +473,12 @@ class SFTPClone(object):
 
         Confront the local and the remote directories and perform the needed changes."""
         # first check for items to be removed
-        self.check_for_deletion()
+        try:
+            self.check_for_deletion()
+        except FileNotFoundError:
+        # If this happens, probably the remote folder doesn't exist.
+            self.logger.error("Error while opening remote folder. Are you sure it does exist?")
+            sys.exit(1)
 
         # now scan local for items to upload/create
         self.check_for_upload_create()
@@ -522,10 +553,26 @@ def create_parser():
     parser.add_argument(
         "-c",
         "--ssh-config",
-        metavar="ssh-config-path",
+        metavar="ssh config path",
         default="~/.ssh/config",
         type=str,
-        help="path of the ssh-configuration file"
+        help="path to the ssh-configuration file (default to ~/.ssh/config)"
+    )
+
+    parser.add_argument(
+        "-n",
+        "--known-hosts",
+        metavar="known_hosts path",
+        default="~/.ssh/known_hosts",
+        type=str,
+        help="path to the openSSH known_hosts file"
+    )
+
+    parser.add_argument(
+        "-d",
+        "--disable-known-hosts",
+        action="store_true",
+        help="disable known_hosts fingerprint checking (security warning!)"
     )
 
     parser.add_argument(
@@ -563,6 +610,7 @@ def main(args=None):
         "remote": "remote_url",
         "ssh_config": "ssh_config_path",
         "exclude_from": "exclude_file",
+        "known_hosts": "known_hosts_path"
     }
 
     kwargs = {  # convert the argument names to class constructor parameters
@@ -576,6 +624,11 @@ def main(args=None):
         for k, v in args.items()
         if v and k not in args_mapping
     })
+
+    # Special case: disable known_hosts check
+    if args['disable_known_hosts']:
+        kwargs['known_hosts_path'] = None
+        del(kwargs['disable_known_hosts'])
 
     sync = SFTPClone(
         **kwargs

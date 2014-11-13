@@ -228,7 +228,8 @@ def test_cli_args():
              '127.0.0.1:' + '/' + REMOTE_FOLDER,
              '-f',
              '-k', t_path("id_rsa"),
-             '-p', "2222"
+             '-p', "2222",
+             '-d'
              ],
         )
 
@@ -237,14 +238,24 @@ def test_cli_args():
          'test@127.0.0.1:' + '/' + REMOTE_FOLDER,
          '-f',
          '-k', t_path("id_rsa"),
-         '-p', "2222"
+         '-p', "2222",
+         '-d'
          ],
     )
 
     _sync_argv(
         [LOCAL_FOLDER,
          'test:secret@127.0.0.1:' + '/' + REMOTE_FOLDER,
-         '-p', "2222"
+         '-p', "2222",
+         '-d'
+         ],
+    )
+
+    _sync_argv(
+        [LOCAL_FOLDER,
+         'test:secret@127.0.0.1:' + '/' + REMOTE_FOLDER,
+         '-p', "2222",
+         '-n', t_path("known_hosts")
          ],
     )
 
@@ -254,6 +265,7 @@ def test_cli_args():
          '-c', t_path("config"),
          # hard to insert relative path in cfg, so we have to cheat
          '-k', t_path("id_rsa"),
+         '-d'
          ],
     )
 

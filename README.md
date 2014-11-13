@@ -17,7 +17,8 @@ A tool for cloning/syncing a local directory tree with an SFTP server.
 ```
 usage: sftpclone.py [-h] [-k private-key-path]
                     [-l {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}] [-p PORT]
-                    [-f] [-a] [-c ssh-config-path] [-e exclude-from-file-path]
+                    [-f] [-a] [-c ssh config path] [-n known_hosts path] [-d]
+                    [-e exclude-from-file-path]
                     local-path user[:password]@hostname:remote-path
 ```
 
@@ -32,6 +33,8 @@ Where, for each command line argument:
 * **[f]ix-symlinks**: if you have absolute symlinks pointing to your synced directory, they will remain consistent on the remote server: i.e., they will have an absolute path that reflect the path of the cloned directory on the server. Useful for cluster configurations.
 * **ssh-[a]gent**: enable ssh-agent support. Any private-[k]ey-path argument will be ignored.
 * **ssh-[c]onfig-path**: in the sftp-url's hostname you can [specify an entry of your `ssh_config` file](#ssh_config-compatibility). If you are using a non-standard path, you can set it here.
+* **k[n]own_hosts path**: path to your [`known_hosts`](#known_hosts-checking) file. Default to `~/.ssh/known_hosts`.
+* **[d]isable-known-hosts**: [disable remote fingerprint](#known_hosts-checking) check against local `known_host` file.
 * **[e]xclude-from-file-path**: the path to a file containing a list of patterns. Each file matched by these pattern [will be ignored](#exclude-list) (not synced).
 
 **Warning**: be sure to select a __proper__ remote folder. The syncronization process will indeed delete any file that doesn't exist in the local folder.
@@ -47,6 +50,13 @@ The hostname in the sftp-url parameter can be a valid entry in a `ssh_config` fi
 Any value not found will fallback to the CLI arguments. 
 Anyway, you _have to set_ the `IdentityFile` field, otherwise authentication will try to fallback to `~/.ssh/id_rsa` and could not work.
 The first hostname matching the pattern is chosen (in the `ssh_config` way).
+
+##known_hosts checking
+By default sftpclone will match the remote host fingerprint against the one contained in your `~/.ssh/known_hosts` file.
+If this file doesn't exists on your machine, you can specify a different path by using the `-n` option.
+Furthermore, you can disable the check with the `-d` flag.
+
+**Note**: if the remote host doesn't have a fingerprint in the `known_host` file, it will automatically pass the check.
 
 ##Exclude list
 It takes inspiration from the rsync/tar `--exclude-from` flag.
