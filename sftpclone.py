@@ -307,7 +307,8 @@ class SFTPClone(object):
                 if link_destination != remote_link:
                     self.sftp.remove(remote_path)
                     self.sftp.symlink(link_destination, remote_path)
-            except IOError:  # if not, create it and done!
+            except IOError as e:  # if not, create it and done!
+                self.logger.warning(e)
                 self.sftp.symlink(link_destination, remote_path)
 
         # Sometimes symlinking fails if absolute path are "too" different

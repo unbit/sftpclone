@@ -13,7 +13,7 @@ def t_path(filename="."):
 
 def list_files(startpath):
     """tree unix command replacement."""
-    s = str()
+    s = '\n'
     for root, dirs, files in os.walk(startpath):
         level = root.replace(startpath, '').count(os.sep)
         indent = ' ' * 4 * (level)

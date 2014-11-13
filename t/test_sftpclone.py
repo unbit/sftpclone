@@ -27,7 +27,7 @@ import socket
 import select
 
 from nose import with_setup
-from nose.tools import assert_raises, raises
+from nose.tools import assert_raises, raises, eq_
 from contextlib import contextmanager
 
 import sys
@@ -182,6 +182,25 @@ def override_env_variables():
             os.environ[v] = old[i]
 
 
+class SuppressLogging:
+
+    """Context handler class that suppresses logging for some controlled code."""
+
+    def __init__(self, loglevel=logging.CRITICAL):
+        """Disable logging."""
+        logging.disable(loglevel)
+        return
+
+    def __enter__(self):
+        """Pass."""
+        return
+
+    def __exit__(self, exctype, excval, exctraceback):
+        """Enable logging again."""
+        logging.disable(logging.NOTSET)
+        return False
+
+
 def _sync_argv(argv):
     """Launch the module's main with given argv and check the result."""
     main(argv)
@@ -233,7 +252,8 @@ def test_cli_args():
         [LOCAL_FOLDER,
          'backup:' + '/' + REMOTE_FOLDER,
          '-c', t_path("config"),
-         '-k', t_path("id_rsa"),  # hard to insert relative path in cfg, so we have to cheat
+         # hard to insert relative path in cfg, so we have to cheat
+         '-k', t_path("id_rsa"),
          ],
     )
 
@@ -264,11 +284,75 @@ def test_remote_tilde_home():
 
 @with_setup(setup_test, teardown_test)
 @raises(SystemExit)
-def test_ssh_agent():
-    """Test ssh_agent."""
+def test_ssh_agent_failure():
+    """Test ssh_agent failure with bad keys (default)."""
     # Suppress STDERR
-    with capture_sys_output():
-        _sync(ssh_agent=True)
+    with SuppressLogging():
+        with capture_sys_output():
+            _sync(ssh_agent=True)
+
+
+@with_setup(setup_test, teardown_test)
+def test_relative_link_to_inner_dir():
+    """Test creation of a relative link to a subnode of the tree.
+
+    dovecot.sieve -> sieve/filtri.sieve
+    sieve/
+        filtri.sieve
+    """
+    local_no_slash = LOCAL_FOLDER \
+        if not LOCAL_FOLDER.endswith("/") else LOCAL_FOLDER.rstrip("/")
+
+    os.mkdir(join(LOCAL_FOLDER, "sieve"))
+    source = join(LOCAL_FOLDER, "sieve", "filtri.sieve")
+    os.open(source, os.O_CREAT)
+    os.symlink(
+        source[len(local_no_slash) + 1:],
+        join(LOCAL_FOLDER, "dovecot.sieve")
+    )
+    _sync()
+    eq_(
+        source[len(local_no_slash) + 1:],
+        os.readlink(
+            join(REMOTE_PATH, "dovecot.sieve")
+        )
+    )
+
+
+@with_setup(setup_test, teardown_test)
+def test_already_relative_link_to_inner_dir():
+    """Test creation of a relative link (that already exists) to a subnode of the tree.
+
+    dovecot.sieve -> sieve/filtri.sieve
+    sieve/
+        filtri.sieve
+
+    while on remote there is:
+    dovecot.sieve -> foo
+    """
+    local_no_slash = LOCAL_FOLDER \
+        if not LOCAL_FOLDER.endswith("/") else LOCAL_FOLDER.rstrip("/")
+
+    os.mkdir(join(LOCAL_FOLDER, "sieve"))
+    source = join(LOCAL_FOLDER, "sieve", "filtri.sieve")
+    os.open(source, os.O_CREAT)
+    os.symlink(
+        source[len(local_no_slash) + 1:],
+        join(LOCAL_FOLDER, "dovecot.sieve")
+    )
+
+    os.symlink(
+        "foo",
+        join(REMOTE_PATH, "dovecot.sieve")
+    )
+
+    _sync()
+    eq_(
+        source[len(local_no_slash) + 1:],
+        os.readlink(
+            join(REMOTE_PATH, "dovecot.sieve")
+        )
+    )
 
 
 @with_setup(setup_test, teardown_test)
