@@ -131,7 +131,8 @@ class SFTPClone(object):
 
             except paramiko.SSHException:
                 agent.close()
-                self.logger.error("SSH agent speaks a non-compatible protocol. Ignoring it.")
+                self.logger.error(
+                    "SSH agent speaks a non-compatible protocol. Ignoring it.")
 
         if key and not self.password and not self.pkeys:
             key = os.path.expanduser(key)
@@ -154,7 +155,8 @@ class SFTPClone(object):
                     sys.exit(1)
             except Exception:
                 self.logger.error(
-                    "Something went wrong while opening {}. Exiting.".format(key)
+                    "Something went wrong while opening {}. Exiting.".format(
+                        key)
                 )
                 sys.exit(1)
         elif not key and not self.password and not self.pkeys:
@@ -179,17 +181,20 @@ class SFTPClone(object):
 
             if known_hosts_path:
                 known_hosts = paramiko.HostKeys()
-                known_hosts_path = os.path.realpath(os.path.expanduser(known_hosts_path))
+                known_hosts_path = os.path.realpath(
+                    os.path.expanduser(known_hosts_path))
 
                 try:
                     known_hosts.load(known_hosts_path)
                 except IOError:
                     self.logger.error(
-                        "Error while loading known hosts file at {}. Exiting...".format(known_hosts_path)
+                        "Error while loading known hosts file at {}. Exiting...".format(
+                            known_hosts_path)
                     )
                     sys.exit(1)
 
-                ssh_host = self.hostname if self.port == 22 else "[{}]:{}".format(self.hostname, self.port)
+                ssh_host = self.hostname if self.port == 22 else "[{}]:{}".format(
+                    self.hostname, self.port)
                 pubK = self.transport.get_remote_server_key()
                 if ssh_host in known_hosts.keys() and not known_hosts.check(ssh_host, pubK):
                     self.logger.error(
@@ -325,26 +330,18 @@ class SFTPClone(object):
 
     def create_update_symlink(self, link_destination, remote_path):
         """Create a new link pointing to link_destination in remote_path position."""
-        try:
-            try:  # check if the remote link exists
-                remote_link = self.sftp.readlink(remote_path)
-
-                # if it does exist and it is different, update it
-                if link_destination != remote_link:
-                    self.sftp.remove(remote_path)
-                    self.sftp.symlink(link_destination, remote_path)
-            except IOError as e:  # if not, create it and done!
-                self.logger.warning(e)
+        try:  # if there's anything, delete it
+            self.sftp.remove(remote_path)
+        except IOError:  # that's fine, nothing exists there!
+            pass
+        finally:  # and recreate the link
+            try:
                 self.sftp.symlink(link_destination, remote_path)
-
-        # Sometimes symlinking fails if absolute path are "too" different
-        except OSError as e:
-        # Sadly, nothing we can do about it.
-            self.logger.error("error while symlinking {} to {}: {}".format(
-                remote_path, link_destination, e))
-        # Possibile FIXME!
-        # except IOError:
-        #     self.create_update_symlink(link_destination, remote_path)
+            except OSError as e:
+            # Sometimes, if links are "too" different, symlink fails.
+            # Sadly, nothing we can do about it.
+                self.logger.error("error while symlinking {} to {}: {}".format(
+                    remote_path, link_destination, e))
 
     def node_check_for_upload_create(self, relative_path, f):
         """Check if the given directory tree node has to be uploaded/created on the remote folder."""
@@ -477,7 +474,8 @@ class SFTPClone(object):
             self.check_for_deletion()
         except FileNotFoundError:
         # If this happens, probably the remote folder doesn't exist.
-            self.logger.error("Error while opening remote folder. Are you sure it does exist?")
+            self.logger.error(
+                "Error while opening remote folder. Are you sure it does exist?")
             sys.exit(1)
 
         # now scan local for items to upload/create
