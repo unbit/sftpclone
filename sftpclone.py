@@ -351,7 +351,18 @@ class SFTPClone(object):
 
         # the (absolute) local address of f.
         local_path = join(self.local_path, relative_path, f)
-        l_st = os.lstat(local_path)
+        try:
+            l_st = os.lstat(local_path)
+        except OSError as e:
+            """A little background here.
+            Sometimes, in big clusters configurations (mail, etc.),
+            files could disappear or be moved, suddenly.
+            There's nothing to do about it,
+            system should be stopped before doing backups.
+            Anyway, we log it, and skip it.
+            """
+            self.logger.error("error while checking {}: {}".format(relative_path, e))
+            return
 
         if (local_path) in self.exclude_list:
             self.logger.info("Skipping excluded file %s.", local_path)
