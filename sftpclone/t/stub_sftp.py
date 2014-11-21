@@ -25,7 +25,7 @@ from paramiko import ServerInterface, SFTPServerInterface, SFTPServer, SFTPAttri
     SFTPHandle, SFTP_OK, AUTH_SUCCESSFUL, AUTH_FAILED, OPEN_SUCCEEDED, RSAKey
 from paramiko.common import o666
 
-from t.utils import t_path
+from sftpclone.t.utils import t_path
 
 USERNAME = "test"
 PASSWORD = "secret"

@@ -21,8 +21,6 @@ from stat import S_ISDIR
 import logging
 
 import paramiko
-from t.stub_sftp import StubServer, StubSFTPServer
-from t.utils import t_path, list_files, file_tree
 import socket
 import select
 
@@ -37,7 +35,9 @@ if sys.version_info > (3, 0):
 else:
     from StringIO import StringIO
 
-from sftpclone import SFTPClone, main
+from sftpclone.t.stub_sftp import StubServer, StubSFTPServer
+from sftpclone.t.utils import t_path, list_files, file_tree
+from sftpclone.sftpclone import SFTPClone, main
 
 
 REMOTE_ROOT = t_path("server_root")
@@ -87,6 +87,8 @@ def _start_sftp_server():
             ts.set_subsystem_handler(
                 'sftp', paramiko.SFTPServer, StubSFTPServer)
             ts.start_server(server=server)
+
+    sock.close()
 
 
 def setup_module():
