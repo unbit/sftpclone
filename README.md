@@ -12,10 +12,28 @@ A tool for cloning/syncing a local directory tree with an SFTP server.
 * Syncing exclusion patterns.
 * Compatible with both Python 2 and Python 3.
 
+##Install
+You can install sftpclone by using pip:
+```bash
+$ pip install sftpclone --user
+```
+
+**Note**: Sometimes building required dependencies in user mode doesn't work. In that case, you'd need to use `sudo` and to remove the `--user` flag.
+Alternatively, you could make use of a virtualenv.
+
+Alternatively, you can clone this repository and then launch:
+```bash
+$ git clone https://github.com/unbit/sftpclone
+$ cd sftpclone
+$ python setup.py install
+```
+
+In both cases, you'll find the sftpclone script in your path.
+
 ##Usage
 
 ```
-usage: sftpclone.py [-h] [-k private-key-path]
+usage: sftpclone [-h] [-k private-key-path]
                     [-l {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}] [-p PORT]
                     [-f] [-a] [-c ssh config path] [-n known_hosts path] [-d]
                     [-e exclude-from-file-path]
@@ -79,7 +97,8 @@ bar/*/foo
 ##Testing
 This project uses [nose](https://nose.readthedocs.org/en/latest/) for testing.
 
-You can test it by launching from the project directory:
+You can test it by launching from the project root directory:
 ```bash
-$ nosetests t
+$ nosetests
+$ python setup.py test # alternatively
 ```
