@@ -127,7 +127,12 @@ def teardown_test():
 teardown_test.__test__ = False
 
 
-def _sync(password=False, fix=False, exclude=None, ssh_agent=False):
+def _sync(
+        password=False, fix=False,
+        exclude=None, ssh_agent=False,
+        delete=True
+
+):
     """Launch sync and do basic comparison of dir trees."""
     if not password:
         remote = 'test@127.0.0.1:' + '/' + REMOTE_FOLDER
@@ -141,11 +146,12 @@ def _sync(password=False, fix=False, exclude=None, ssh_agent=False):
         fix_symlinks=fix,
         key=t_path("id_rsa"),
         exclude_file=exclude,
-        ssh_agent=ssh_agent
+        ssh_agent=ssh_agent,
+        delete=delete
     )
     sync.run()
 
-    if not exclude:
+    if not exclude and delete:
         # check the directory trees
         assert \
             file_tree(
@@ -638,3 +644,37 @@ def test_remote_but_not_local_directories():
     for f in full_dirs:
         assert os.listdir(join(REMOTE_PATH, f)) == os.listdir(
             join(LOCAL_FOLDER, f))
+
+
+@with_setup(setup_test, teardown_test)
+def test_remote_dot_not_delete():
+    """Test do not delete missing local files on remote end."""
+    normal_files = ("bar", "bis")  # just to add noise
+    for f in normal_files:
+        os.open(join(LOCAL_FOLDER, f), os.O_CREAT)
+        os.open(join(REMOTE_PATH, f), os.O_CREAT)
+
+    normal_dir = "dir"
+    os.mkdir(join(LOCAL_FOLDER, normal_dir))
+
+    remote_only = ("remote", "only")  # just to add noise
+    for f in remote_only:
+        os.open(join(REMOTE_PATH, f), os.O_CREAT)
+
+    remote_dir = "remote_dir"
+    os.mkdir(join(REMOTE_PATH, remote_dir))
+
+    _sync(delete=False)
+
+    local = set(file_tree(LOCAL_FOLDER)[LOCAL_FOLDER_NAME].keys())
+    remote = set(file_tree(REMOTE_PATH)[REMOTE_FOLDER].keys())
+    normal_files = set(normal_files)
+    remote_only = set(remote_only)
+
+    assert local < remote
+    assert normal_files < remote
+    assert normal_dir in remote
+    assert remote_only < remote
+    assert remote_dir in remote
+    assert remote_dir not in local
+    assert not remote_only & local

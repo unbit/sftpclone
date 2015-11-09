@@ -34,10 +34,10 @@ In both cases, you'll find the sftpclone script in your path.
 
 ```
 usage: sftpclone [-h] [-k private-key-path]
-                    [-l {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}] [-p PORT]
-                    [-f] [-a] [-c ssh config path] [-n known_hosts path] [-d]
-                    [-e exclude-from-file-path]
-                    local-path user[:password]@hostname:remote-path
+                 [-l {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}] [-p PORT]
+                 [-f] [-a] [-c ssh config path] [-n known_hosts path] [-d]
+                 [-e exclude-from-file-path] [-t]
+                 local-path user[:password]@hostname:remote-path
 ```
 
 Where, for each command line argument:
@@ -54,6 +54,7 @@ Where, for each command line argument:
 * **k[n]own_hosts path**: path to your [`known_hosts`](#known_hosts-checking) file. Default to `~/.ssh/known_hosts`.
 * **[d]isable-known-hosts**: [disable remote fingerprint](#known_hosts-checking) check against local `known_host` file.
 * **[e]xclude-from-file-path**: the path to a file containing a list of patterns. Each file matched by these pattern [will be ignored](#exclude-list) (not synced).
+* **do-not-dele[t]e**: do not delete remote files that are missing from the local directory.
 
 **Warning**: be sure to select a __proper__ remote folder. The synchronization process will indeed delete any file that doesn't exist in the local folder.
 

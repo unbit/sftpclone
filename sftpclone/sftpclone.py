@@ -49,7 +49,9 @@ class SFTPClone(object):
     def __init__(self, local_path, remote_url,
                  key=None, port=None, fix_symlinks=False,
                  ssh_config_path=None, ssh_agent=False,
-                 exclude_file=None, known_hosts_path=None):
+                 exclude_file=None, known_hosts_path=None,
+                 delete=True
+                 ):
         """Init the needed parameters and the SFTPClient."""
         self.local_path = os.path.realpath(os.path.expanduser(local_path))
         self.logger = logger or configure_logging()
@@ -118,6 +120,7 @@ class SFTPClone(object):
 
         self.chown = False
         self.fix_symlinks = fix_symlinks or False
+        self.delete = delete if delete is not None else True
 
         self.pkeys = list()
         if ssh_agent:
@@ -486,15 +489,16 @@ class SFTPClone(object):
         """Run the sync.
 
         Confront the local and the remote directories and perform the needed changes."""
-        # first check for items to be removed
-        try:
-            self.check_for_deletion()
-        except FileNotFoundError:
-            # If this happens, probably the remote folder doesn't exist.
-            self.logger.error(
-                "Error while opening remote folder. Are you sure it does exist?")
-            sys.exit(1)
-
+        if self.delete:
+            # First check for items to be removed
+            try:
+                self.check_for_deletion()
+            except FileNotFoundError:
+                # If this happens, probably the remote folder doesn't exist.
+                self.logger.error(
+                    "Error while opening remote folder. Are you sure it does exist?")
+                sys.exit(1)
+        # TODO: what if remote directory doesn't exist?
         # now scan local for items to upload/create
         self.check_for_upload_create()
 
@@ -597,6 +601,14 @@ def create_parser():
         type=str,
         help="exclude files matching pattern in exclude-from-file-path"
     )
+
+    parser.add_argument(
+        "-t",
+        "--do-not-delete",
+        action="store_true",
+        help="do not delete remote files missing from local folder"
+    )
+
     return parser
 
 
@@ -625,7 +637,8 @@ def main(args=None):
         "remote": "remote_url",
         "ssh_config": "ssh_config_path",
         "exclude_from": "exclude_file",
-        "known_hosts": "known_hosts_path"
+        "known_hosts": "known_hosts_path",
+        "do_not_delete": "delete"
     }
 
     kwargs = {  # convert the argument names to class constructor parameters
@@ -644,6 +657,10 @@ def main(args=None):
     if args['disable_known_hosts']:
         kwargs['known_hosts_path'] = None
         del(kwargs['disable_known_hosts'])
+
+    # Toggle `do_not_delete` flag
+    if "delete" in kwargs:
+        kwargs["delete"] = not kwargs["delete"]
 
     sync = SFTPClone(
         **kwargs
