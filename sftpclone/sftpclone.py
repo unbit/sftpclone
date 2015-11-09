@@ -1,4 +1,4 @@
-"""SFTPClone: sync local and remote directories."""
+#!/usr/bin/env python
 
 # Python 2.7 backward compatibility
 from __future__ import print_function
@@ -16,6 +16,8 @@ import logging
 from getpass import getuser, getpass
 import glob
 import socket
+
+"""SFTPClone: sync local and remote directories."""
 
 logger = None
 
@@ -112,13 +114,14 @@ class SFTPClone(object):
             self.username = getuser()  # defaults to current user
 
         if not self.port:
-            self.port = port if port else 22
+            self.port = port or 22
 
         self.chown = False
-        self.fix_symlinks = fix_symlinks if fix_symlinks else False
+        self.fix_symlinks = fix_symlinks or False
 
         self.pkeys = list()
         if ssh_agent:
+            agent = None
             try:
                 agent = paramiko.agent.Agent()
                 self.pkeys.append(*agent.get_keys())
@@ -130,7 +133,8 @@ class SFTPClone(object):
                     )
 
             except paramiko.SSHException:
-                agent.close()
+                if agent:
+                    agent.close()
                 self.logger.error(
                     "SSH agent speaks a non-compatible protocol. Ignoring it.")
 
@@ -153,7 +157,7 @@ class SFTPClone(object):
                         "Incorrect passphrase. Cannot decode private key."
                     )
                     sys.exit(1)
-            except Exception:
+            except:
                 self.logger.error(
                     "Something went wrong while opening {}. Exiting.".format(
                         key)
@@ -195,14 +199,14 @@ class SFTPClone(object):
 
                 ssh_host = self.hostname if self.port == 22 else "[{}]:{}".format(
                     self.hostname, self.port)
-                pubK = self.transport.get_remote_server_key()
-                if ssh_host in known_hosts.keys() and not known_hosts.check(ssh_host, pubK):
+                pubk = self.transport.get_remote_server_key()
+                if ssh_host in known_hosts.keys() and not known_hosts.check(ssh_host, pubk):
                     self.logger.error(
                         "Security warning: "
                         "remote key fingerprint {} for hostname "
                         "{} didn't match the one in known_hosts {}. "
                         "Exiting...".format(
-                            pubK.get_base64(),
+                            pubk.get_base64(),
                             ssh_host,
                             known_hosts.lookup(self.hostname),
                         )
@@ -222,7 +226,7 @@ class SFTPClone(object):
                             key=pkey
                         )
                         break
-                    except paramiko.SSHException as e:
+                    except paramiko.SSHException:
                         self.logger.warning(
                             "Authentication with identity {}... failed".format(
                                 pkey.get_base64()[:10]
@@ -239,31 +243,20 @@ class SFTPClone(object):
 
         self.sftp = paramiko.SFTPClient.from_transport(self.transport)
 
-        if (self.remote_path.startswith("~")):
+        if self.remote_path.startswith("~"):
             # nasty hack to let getcwd work without changing dir!
             self.sftp.chdir('.')
             self.remote_path = self.remote_path.replace(
                 "~", self.sftp.getcwd())  # home is the initial sftp dir
 
-    def _file_need_upload(self, l_st, r_st):
+    @staticmethod
+    def _file_need_upload(l_st, r_st):
         return True if \
-            (l_st.st_size != r_st.st_size) or (int(l_st.st_mtime) != r_st.st_mtime) \
+            l_st.st_size != r_st.st_size or int(l_st.st_mtime) != r_st.st_mtime \
             else False
 
-    def _match_modes(self, remote_path, l_st):
-        """Match mod, utime and uid/gid with locals one."""
-        self.sftp.chmod(remote_path, S_IMODE(l_st.st_mode))
-        self.sftp.utime(remote_path, (l_st.st_atime, l_st.st_mtime))
-
-        if self.chown:
-            self.sftp.chown(remote_path, l_st.st_uid, l_st.st_gid)
-
-    def file_upload(self, local_path, remote_path, l_st):
-        """Upload local_path to remote_path and set permission and mtime."""
-        self.sftp.put(local_path, remote_path)
-        self._match_modes(remote_path, l_st)
-
-    def _must_be_deleted(self, local_path, r_st):
+    @staticmethod
+    def _must_be_deleted(local_path, r_st):
         """Return True if the remote correspondent of local_path has to be deleted.
 
         i.e. if it doesn't exists locally or if it has a different type from the remote one."""
@@ -277,6 +270,19 @@ class SFTPClone(object):
             return True
 
         return False
+
+    def _match_modes(self, remote_path, l_st):
+        """Match mod, utime and uid/gid with locals one."""
+        self.sftp.chmod(remote_path, S_IMODE(l_st.st_mode))
+        self.sftp.utime(remote_path, (l_st.st_atime, l_st.st_mtime))
+
+        if self.chown:
+            self.sftp.chown(remote_path, l_st.st_uid, l_st.st_gid)
+
+    def file_upload(self, local_path, remote_path, l_st):
+        """Upload local_path to remote_path and set permission and mtime."""
+        self.sftp.put(local_path, remote_path)
+        self._match_modes(remote_path, l_st)
 
     def remote_delete(self, remote_path, r_st):
         """Remove the remote directory node."""
@@ -317,7 +323,7 @@ class SFTPClone(object):
             # check if remote_st is a symlink
             # otherwise could delete file outside shared directory
             if S_ISLNK(r_lstat.st_mode):
-                if (self._must_be_deleted(inner_local_path, r_lstat)):
+                if self._must_be_deleted(inner_local_path, r_lstat):
                     self.remote_delete(inner_remote_path, r_lstat)
                 continue
 
@@ -338,8 +344,8 @@ class SFTPClone(object):
             try:
                 self.sftp.symlink(link_destination, remote_path)
             except OSError as e:
-            # Sometimes, if links are "too" different, symlink fails.
-            # Sadly, nothing we can do about it.
+                # Sometimes, if links are "too" different, symlink fails.
+                # Sadly, nothing we can do about it.
                 self.logger.error("error while symlinking {} to {}: {}".format(
                     remote_path, link_destination, e))
 
@@ -364,7 +370,7 @@ class SFTPClone(object):
             self.logger.error("error while checking {}: {}".format(relative_path, e))
             return
 
-        if (local_path) in self.exclude_list:
+        if local_path in self.exclude_list:
             self.logger.info("Skipping excluded file %s.", local_path)
             return
 
@@ -377,7 +383,7 @@ class SFTPClone(object):
             # it has to be a folder, otherwise it would have already been
             # deleted
             try:
-                r_st = self.sftp.stat(remote_path)
+                self.sftp.stat(remote_path)
             except IOError:  # it doesn't exist yet on remote side
                 self.sftp.mkdir(remote_path)
 
@@ -484,7 +490,7 @@ class SFTPClone(object):
         try:
             self.check_for_deletion()
         except FileNotFoundError:
-        # If this happens, probably the remote folder doesn't exist.
+            # If this happens, probably the remote folder doesn't exist.
             self.logger.error(
                 "Error while opening remote folder. Are you sure it does exist?")
             sys.exit(1)

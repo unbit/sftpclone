@@ -1,8 +1,8 @@
-"""SFTPSync tests."""
-
-#! /usr/bin/env python3
+#!/usr/bin/env python
 # coding = utf-8
 # author = Adriano Di Luzio
+
+"""SFTPClone tests."""
 
 # Simply launch me by using nosetests and I'll do the magic.
 # I require paramiko
@@ -11,6 +11,10 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import absolute_import
+
+from sftpclone.t.stub_sftp import StubServer, StubSFTPServer
+from sftpclone.t.utils import t_path, list_files, file_tree
+from sftpclone.sftpclone import SFTPClone, main
 
 import threading
 import os
@@ -34,11 +38,6 @@ if sys.version_info > (3, 0):
     from io import StringIO
 else:
     from StringIO import StringIO
-
-from sftpclone.t.stub_sftp import StubServer, StubSFTPServer
-from sftpclone.t.utils import t_path, list_files, file_tree
-from sftpclone.sftpclone import SFTPClone, main
-
 
 REMOTE_ROOT = t_path("server_root")
 REMOTE_FOLDER = "server_folder"

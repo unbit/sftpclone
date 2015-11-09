@@ -55,7 +55,7 @@ Where, for each command line argument:
 * **[d]isable-known-hosts**: [disable remote fingerprint](#known_hosts-checking) check against local `known_host` file.
 * **[e]xclude-from-file-path**: the path to a file containing a list of patterns. Each file matched by these pattern [will be ignored](#exclude-list) (not synced).
 
-**Warning**: be sure to select a __proper__ remote folder. The syncronization process will indeed delete any file that doesn't exist in the local folder.
+**Warning**: be sure to select a __proper__ remote folder. The synchronization process will indeed delete any file that doesn't exist in the local folder.
 
 ##ssh_config compatibility
 The hostname in the sftp-url parameter can be a valid entry in a `ssh_config` file. Specifically, your entry should have relevant parameters such as:
