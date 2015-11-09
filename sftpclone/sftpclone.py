@@ -21,6 +21,12 @@ import socket
 
 logger = None
 
+try:
+    # Not available in Python 2.x
+    FileNotFoundError
+except NameError:
+    FileNotFoundError = IOError
+
 
 def configure_logging(level=logging.DEBUG):
     """Configure the module logging engine."""
@@ -489,18 +495,18 @@ class SFTPClone(object):
         """Run the sync.
 
         Confront the local and the remote directories and perform the needed changes."""
-        if self.delete:
-            # First check for items to be removed
-            try:
+        try:
+            if self.delete:
+                # First check for items to be removed
                 self.check_for_deletion()
-            except FileNotFoundError:
-                # If this happens, probably the remote folder doesn't exist.
-                self.logger.error(
-                    "Error while opening remote folder. Are you sure it does exist?")
-                sys.exit(1)
-        # TODO: what if remote directory doesn't exist?
-        # now scan local for items to upload/create
-        self.check_for_upload_create()
+
+            # Now scan local for items to upload/create
+            self.check_for_upload_create()
+        except FileNotFoundError:
+            # If this happens, probably the remote folder doesn't exist.
+            self.logger.error(
+                "Error while opening remote folder. Are you sure it does exist?")
+            sys.exit(1)
 
 
 def create_parser():
