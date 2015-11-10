@@ -36,7 +36,7 @@ In both cases, you'll find the sftpclone script in your path.
 usage: sftpclone [-h] [-k private-key-path]
                  [-l {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}] [-p PORT]
                  [-f] [-a] [-c ssh config path] [-n known_hosts path] [-d]
-                 [-e exclude-from-file-path] [-t]
+                 [-e exclude-from-file-path] [-t] [-o]
                  local-path user[:password]@hostname:remote-path
 ```
 
@@ -55,8 +55,10 @@ Where, for each command line argument:
 * **[d]isable-known-hosts**: [disable remote fingerprint](#known_hosts-checking) check against local `known_host` file.
 * **[e]xclude-from-file-path**: the path to a file containing a list of patterns. Each file matched by these pattern [will be ignored](#exclude-list) (not synced).
 * **do-not-dele[t]e**: do not delete remote files that are missing from the local directory.
+* **all[o]w-unknown**: do not ask for confirmation before connecting to unknown hosts.
 
-**Warning**: be sure to select a __proper__ remote folder. The synchronization process will indeed delete any file that doesn't exist in the local folder.
+**Warning**: be sure to select a __proper__ remote folder. 
+The synchronization process will indeed delete any file that doesn't exist in the local folder (unless you turn the `-t` option on).
 
 ##ssh_config compatibility
 The hostname in the sftp-url parameter can be a valid entry in a `ssh_config` file. Specifically, your entry should have relevant parameters such as:

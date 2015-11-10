@@ -210,6 +210,7 @@ class SuppressLogging:
 
 def _sync_argv(argv):
     """Launch the module's main with given argv and check the result."""
+    argv.append("-o")  # allow unknown hosts
     main(argv)
 
     assert \

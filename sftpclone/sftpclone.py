@@ -27,12 +27,6 @@ try:
 except NameError:
     FileNotFoundError = IOError
 
-try:
-    # Renamed to `input` in Python 3.x
-    input_f = raw_input
-except NameError:
-    input_f = input
-
 
 def configure_logging(level=logging.DEBUG):
     """Configure the module logging engine."""
@@ -62,7 +56,7 @@ class SFTPClone(object):
                  key=None, port=None, fix_symlinks=False,
                  ssh_config_path=None, ssh_agent=False,
                  exclude_file=None, known_hosts_path=None,
-                 delete=True
+                 delete=True, allow_unknown=False
                  ):
         """Init the needed parameters and the SFTPClient."""
         self.local_path = os.path.realpath(os.path.expanduser(local_path))
@@ -133,6 +127,7 @@ class SFTPClone(object):
         self.chown = False
         self.fix_symlinks = fix_symlinks or False
         self.delete = delete if delete is not None else True
+        self.allow_unknown = allow_unknown or False
 
         self.pkeys = list()
         if ssh_agent:
@@ -246,13 +241,17 @@ class SFTPClone(object):
                             )
                         )
                         sys.exit(1)
-                else:  # host is unknown
-                    response = input_f(
-                        "The authenticity of host '{}' can't be established.\n"
-                        "{} key is {}.\n"
-                        "Are you sure you want to continue connecting? [y/n] ".format(
-                            ssh_host, pubk.get_name(), pubk.get_base64())
-                    )
+                elif not self.allow_unknown:
+                    prompt = ("The authenticity of host '{}' can't be established.\n"
+                              "{} key is {}.\n"
+                              "Are you sure you want to continue connecting? [y/n] ").format(
+                        ssh_host, pubk.get_name(), pubk.get_base64())
+
+                    try:
+                        # Renamed to `input` in Python 3.x
+                        response = raw_input(prompt)
+                    except NameError:
+                        response = input(prompt)
 
                     # Note: we do not modify the user's known_hosts file
 
@@ -653,6 +652,13 @@ def create_parser():
         "--do-not-delete",
         action="store_true",
         help="do not delete remote files missing from local folder"
+    )
+
+    parser.add_argument(
+        "-o",
+        "--allow-unknown",
+        action="store_true",
+        help="allow connection to unknown hosts"
     )
 
     return parser
