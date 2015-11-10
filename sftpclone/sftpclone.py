@@ -172,7 +172,7 @@ class SFTPClone(object):
                         "Incorrect passphrase. Cannot decode private key."
                     )
                     sys.exit(1)
-            except:
+            except IOError or paramiko.ssh_exception.SSHException:
                 self.logger.error(
                     "Something went wrong while opening {}. Exiting.".format(
                         key)
