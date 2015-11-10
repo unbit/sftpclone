@@ -27,6 +27,12 @@ try:
 except NameError:
     FileNotFoundError = IOError
 
+try:
+    # Renamed to `input` in Python 3.x
+    input_f = raw_input
+except NameError:
+    input_f = input
+
 
 def configure_logging(level=logging.DEBUG):
     """Configure the module logging engine."""
@@ -190,8 +196,16 @@ class SFTPClone(object):
             sys.exit(1)
 
         try:
-            self.transport.start_client()
+            ssh_host = self.hostname if self.port == 22 else "[{}]:{}".format(
+                self.hostname, self.port)
+            known_hosts = None
 
+            """
+            Before starting the transport session, we have to configure it.
+            Specifically, we need to configured the preferred PK algorithm.
+            If the system already knows a public key of a specific kind for
+            a remote host, we have to peek its type as the preferred one.
+            """
             if known_hosts_path:
                 known_hosts = paramiko.HostKeys()
                 known_hosts_path = os.path.realpath(
@@ -206,21 +220,47 @@ class SFTPClone(object):
                     )
                     sys.exit(1)
 
-                ssh_host = self.hostname if self.port == 22 else "[{}]:{}".format(
-                    self.hostname, self.port)
+                known_keys = known_hosts.lookup(ssh_host)
+                if known_keys is not None:
+                    # one or more keys are already known
+                    # set their type as preferred
+                    self.transport.get_security_options().key_types = \
+                        tuple(known_keys.keys())
+
+            self.transport.start_client()
+
+            if not known_hosts:
+                self.logger.warning("Security warning: skipping known hosts check...")
+            else:
                 pubk = self.transport.get_remote_server_key()
-                if ssh_host in known_hosts.keys() and not known_hosts.check(ssh_host, pubk):
-                    self.logger.error(
-                        "Security warning: "
-                        "remote key fingerprint {} for hostname "
-                        "{} didn't match the one in known_hosts {}. "
-                        "Exiting...".format(
-                            pubk.get_base64(),
-                            ssh_host,
-                            known_hosts.lookup(self.hostname),
+                if ssh_host in known_hosts.keys():
+                    if not known_hosts.check(ssh_host, pubk):
+                        self.logger.error(
+                            "Security warning: "
+                            "remote key fingerprint {} for hostname "
+                            "{} didn't match the one in known_hosts {}. "
+                            "Exiting...".format(
+                                pubk.get_base64(),
+                                ssh_host,
+                                known_hosts.lookup(self.hostname),
+                            )
                         )
+                        sys.exit(1)
+                else:  # host is unknown
+                    response = input_f(
+                        "The authenticity of host '{}' can't be established.\n"
+                        "{} key is {}.\n"
+                        "Are you sure you want to continue connecting? [y/n] ".format(
+                            ssh_host, pubk.get_name(), pubk.get_base64())
                     )
-                    sys.exit(1)
+
+                    # Note: we do not modify the user's known_hosts file
+
+                    if not (response == "y" or response == "yes"):
+                        self.logger.error(
+                            "Host authentication failed."
+                        )
+                        sys.exit(1)
 
             if self.password:
                 self.transport.auth_password(

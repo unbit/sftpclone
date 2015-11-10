@@ -74,8 +74,8 @@ The first hostname matching the pattern is chosen (in the `ssh_config` way).
 By default sftpclone will match the remote host fingerprint against the one contained in your `~/.ssh/known_hosts` file.
 If this file doesn't exists on your machine, you can specify a different path by using the `-n` option.
 Furthermore, you can disable the check with the `-d` flag.
-
-**Note**: if the remote host doesn't have a fingerprint in the `known_host` file, it will automatically pass the check.
+Unknown hosts will require the user to authorize the connection. Please note that, even after authorization, the `known_host`
+file won't be modified.
 
 ##Exclude list
 It takes inspiration from the rsync/tar `--exclude-from` flag.
