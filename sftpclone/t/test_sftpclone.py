@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-# coding = utf-8
-# author = Adriano Di Luzio
+# coding=utf-8
+# author=Adriano Di Luzio
 
 """SFTPClone tests."""
 
@@ -11,6 +11,8 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import absolute_import
+
+import unicodedata
 
 from sftpclone.t.stub_sftp import StubServer, StubSFTPServer
 from sftpclone.t.utils import t_path, list_files, file_tree
@@ -378,10 +380,10 @@ def test_already_relative_link_to_inner_dir():
 @with_setup(setup_test, teardown_test)
 def test_exclude():
     """Test pattern exclusion handling."""
-    exclused = {"foofolder"}
+    excluded = {"foofolder"}
     os.mkdir(join(LOCAL_FOLDER, "foofolder"))
 
-    exclused |= {"foo", "foofile"}
+    excluded |= {"foo", "foofile"}
     os.open(join(LOCAL_FOLDER, "file_one"), os.O_CREAT)
     os.open(join(LOCAL_FOLDER, "file_two"), os.O_CREAT)
     os.open(join(LOCAL_FOLDER, "foo"), os.O_CREAT)
@@ -389,7 +391,7 @@ def test_exclude():
 
     _sync(exclude=t_path("exclude"))
 
-    assert not set(os.listdir(REMOTE_PATH)) & exclused
+    assert not set(os.listdir(REMOTE_PATH)) & excluded
 
 
 @with_setup(setup_test, teardown_test)
@@ -405,7 +407,7 @@ def test_inner_exclude():
     _sync(exclude=t_path("exclude"))
 
     assert set(os.listdir(join(REMOTE_PATH, "bar"))) == {"file_one", "inner"}
-    assert set(os.listdir(join(REMOTE_PATH, "bar", "inner"))) == {"bar"}
+    eq_(set(os.listdir(join(REMOTE_PATH, "bar", "inner"))), {"bar"})
 
 
 @with_setup(setup_test, teardown_test)
@@ -679,3 +681,23 @@ def test_remote_dot_not_delete():
     assert remote_dir in remote
     assert remote_dir not in local
     assert not remote_only & local
+
+
+@with_setup(setup_test, teardown_test)
+def test_handle_unicode_files():
+    """Test handling unicode files."""
+    files = ("à", "é")
+    for f in files:
+        os.open(join(LOCAL_FOLDER, f), os.O_CREAT)
+
+    directory = "ò"
+    os.mkdir(join(REMOTE_PATH, directory))
+
+    _sync()
+
+    remote_files = os.listdir(REMOTE_PATH)
+
+    remote_files = {unicodedata.normalize("NFKD", c) for c in remote_files}
+    files = {unicodedata.normalize("NFKD", c) for c in files}
+    assert remote_files == files
+
