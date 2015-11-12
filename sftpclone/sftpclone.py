@@ -423,7 +423,7 @@ class SFTPClone(object):
             return
 
         # the (absolute) remote address of f.
-        remote_path = join(self.remote_path.encode('utf8'), relative_path.encode('utf8'), f)
+        remote_path = join(self.remote_path.encode('utf8'), relative_path.encode('utf8'), f.encode('utf8'))
 
         # First case: f is a directory
         if S_ISDIR(l_st.st_mode):
