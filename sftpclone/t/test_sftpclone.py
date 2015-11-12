@@ -25,6 +25,7 @@ from shutil import rmtree, copy
 import random
 from stat import S_ISDIR
 import logging
+import functools
 
 import paramiko
 import socket
@@ -690,6 +691,12 @@ def test_handle_unicode_files():
     for f in files:
         os.open(join(LOCAL_FOLDER, f), os.O_CREAT)
 
+    local_dir = "container"
+    os.mkdir(join(LOCAL_FOLDER, local_dir))
+
+    unicode_name = "Sağlayıcısı"
+    os.open(join(LOCAL_FOLDER, local_dir, unicode_name), os.O_CREAT)
+
     directory = "ò"
     os.mkdir(join(REMOTE_PATH, directory))
 
@@ -697,7 +704,11 @@ def test_handle_unicode_files():
 
     remote_files = os.listdir(REMOTE_PATH)
 
-    remote_files = {unicodedata.normalize("NFKD", c) for c in remote_files}
-    files = {unicodedata.normalize("NFKD", c) for c in files}
+    _u = functools.partial(unicodedata.normalize, "NFKD")
+
+    remote_files = {_u(c) for c in remote_files}
+    files = {_u(c) for c in files}
+    files |= {_u("container")}
     assert remote_files == files
+    assert _u(unicode_name) in (_u(f) for f in os.listdir(join(REMOTE_PATH, "container")))
 
