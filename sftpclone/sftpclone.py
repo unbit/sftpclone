@@ -6,8 +6,9 @@ from __future__ import unicode_literals
 from __future__ import absolute_import
 
 import paramiko
+import paramiko.py3compat
 import os
-from os.path import join
+import os.path
 import sys
 import errno
 from stat import S_ISDIR, S_ISLNK, S_ISREG, S_IMODE, S_IFMT
@@ -48,6 +49,15 @@ def configure_logging(level=logging.DEBUG):
     return logger
 
 
+def path_join(*args):
+    """
+    Wrapper around `os.path.join`.
+    Makes sure to join paths of the same type (bytes).
+    """
+    args = (paramiko.py3compat.u(arg) for arg in args)
+    return os.path.join(*args)
+
+
 class SFTPClone(object):
 
     """The SFTPClone class."""
@@ -81,7 +91,7 @@ class SFTPClone(object):
                 self.exclude_list = {
                     g
                     for pattern in exclude_list
-                    for g in glob.glob(join(self.local_path, pattern))
+                    for g in glob.glob(path_join(self.local_path, pattern))
                 }
         else:
             self.exclude_list = set()
@@ -337,7 +347,7 @@ class SFTPClone(object):
         # If it's a directory, then delete content and directory
         if S_ISDIR(r_st.st_mode):
             for item in self.sftp.listdir_attr(remote_path):
-                full_path = join(remote_path, item.filename)
+                full_path = path_join(remote_path, item.filename)
                 self.remote_delete(full_path, item)
             self.sftp.rmdir(remote_path)
 
@@ -359,14 +369,14 @@ class SFTPClone(object):
         if not relative_path:
             relative_path = str()  # root of shared directory tree
 
-        remote_path = join(self.remote_path, relative_path)
-        local_path = join(self.local_path, relative_path)
+        remote_path = path_join(self.remote_path, relative_path)
+        local_path = path_join(self.local_path, relative_path)
 
         for remote_st in self.sftp.listdir_attr(remote_path):
-            r_lstat = self.sftp.lstat(join(remote_path, remote_st.filename))
+            r_lstat = self.sftp.lstat(path_join(remote_path, remote_st.filename))
 
-            inner_remote_path = join(remote_path, remote_st.filename)
-            inner_local_path = join(local_path, remote_st.filename)
+            inner_remote_path = path_join(remote_path, remote_st.filename)
+            inner_local_path = path_join(local_path, remote_st.filename)
 
             # check if remote_st is a symlink
             # otherwise could delete file outside shared directory
@@ -379,7 +389,7 @@ class SFTPClone(object):
                 self.remote_delete(inner_remote_path, remote_st)
             elif S_ISDIR(remote_st.st_mode):
                 self.check_for_deletion(
-                    join(relative_path, remote_st.filename)
+                    path_join(relative_path, remote_st.filename)
                 )
 
     def create_update_symlink(self, link_destination, remote_path):
@@ -404,7 +414,7 @@ class SFTPClone(object):
             relative_path = str()
 
         # the (absolute) local address of f.
-        local_path = join(self.local_path, relative_path, f)
+        local_path = path_join(self.local_path, relative_path, f)
         try:
             l_st = os.lstat(local_path)
         except OSError as e:
@@ -423,7 +433,7 @@ class SFTPClone(object):
             return
 
         # the (absolute) remote address of f.
-        remote_path = join(self.remote_path, relative_path, f)
+        remote_path = path_join(self.remote_path, relative_path, f)
 
         # First case: f is a directory
         if S_ISDIR(l_st.st_mode):
@@ -438,7 +448,7 @@ class SFTPClone(object):
             self._match_modes(remote_path, l_st)
 
             # now, we should traverse f too (recursion magic!)
-            self.check_for_upload_create(join(relative_path, f))
+            self.check_for_upload_create(path_join(relative_path, f))
 
         # Second case: f is a symbolic link
         elif S_ISLNK(l_st.st_mode):
@@ -450,7 +460,7 @@ class SFTPClone(object):
             is_absolute = local_link.startswith("/")
             # and does it point inside the shared directory?
             # add trailing slash (security)
-            trailing_local_path = join(self.local_path, '')
+            trailing_local_path = path_join(self.local_path, '')
             relpath = os.path.commonprefix(
                 [absolute_local_link,
                  trailing_local_path]
@@ -497,7 +507,7 @@ class SFTPClone(object):
             if is_absolute and relpath:
                 if self.fix_symlinks:
                     self.create_update_symlink(
-                        join(
+                        path_join(
                             self.remote_path,
                             relative_link,
                         ),
@@ -525,7 +535,7 @@ class SFTPClone(object):
 
         Relativity here refers to the shared directory tree."""
         for f in os.listdir(
-            join(
+            path_join(
                 self.local_path, relative_path) if relative_path else self.local_path
         ):
             self.node_check_for_upload_create(relative_path, f)
