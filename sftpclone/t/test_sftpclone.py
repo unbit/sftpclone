@@ -1,8 +1,8 @@
-"""SFTPSync tests."""
+#!/usr/bin/env python
+# coding=utf-8
+# author=Adriano Di Luzio
 
-#! /usr/bin/env python3
-# coding = utf-8
-# author = Adriano Di Luzio
+"""SFTPClone tests."""
 
 # Simply launch me by using nosetests and I'll do the magic.
 # I require paramiko
@@ -12,6 +12,12 @@ from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import absolute_import
 
+import unicodedata
+
+from sftpclone.t.stub_sftp import StubServer, StubSFTPServer
+from sftpclone.t.utils import t_path, list_files, file_tree
+from sftpclone.sftpclone import SFTPClone, main
+
 import threading
 import os
 from os.path import join
@@ -19,6 +25,7 @@ from shutil import rmtree, copy
 import random
 from stat import S_ISDIR
 import logging
+import functools
 
 import paramiko
 import socket
@@ -34,11 +41,6 @@ if sys.version_info > (3, 0):
     from io import StringIO
 else:
     from StringIO import StringIO
-
-from sftpclone.t.stub_sftp import StubServer, StubSFTPServer
-from sftpclone.t.utils import t_path, list_files, file_tree
-from sftpclone.sftpclone import SFTPClone, main
-
 
 REMOTE_ROOT = t_path("server_root")
 REMOTE_FOLDER = "server_folder"
@@ -128,7 +130,12 @@ def teardown_test():
 teardown_test.__test__ = False
 
 
-def _sync(password=False, fix=False, exclude=None, ssh_agent=False):
+def _sync(
+        password=False, fix=False,
+        exclude=None, ssh_agent=False,
+        delete=True
+
+):
     """Launch sync and do basic comparison of dir trees."""
     if not password:
         remote = 'test@127.0.0.1:' + '/' + REMOTE_FOLDER
@@ -142,11 +149,12 @@ def _sync(password=False, fix=False, exclude=None, ssh_agent=False):
         fix_symlinks=fix,
         key=t_path("id_rsa"),
         exclude_file=exclude,
-        ssh_agent=ssh_agent
+        ssh_agent=ssh_agent,
+        delete=delete
     )
     sync.run()
 
-    if not exclude:
+    if not exclude and delete:
         # check the directory trees
         assert \
             file_tree(
@@ -205,6 +213,7 @@ class SuppressLogging:
 
 def _sync_argv(argv):
     """Launch the module's main with given argv and check the result."""
+    argv.append("-o")  # allow unknown hosts
     main(argv)
 
     assert \
@@ -372,10 +381,10 @@ def test_already_relative_link_to_inner_dir():
 @with_setup(setup_test, teardown_test)
 def test_exclude():
     """Test pattern exclusion handling."""
-    exclused = {"foofolder"}
+    excluded = {"foofolder"}
     os.mkdir(join(LOCAL_FOLDER, "foofolder"))
 
-    exclused |= {"foo", "foofile"}
+    excluded |= {"foo", "foofile"}
     os.open(join(LOCAL_FOLDER, "file_one"), os.O_CREAT)
     os.open(join(LOCAL_FOLDER, "file_two"), os.O_CREAT)
     os.open(join(LOCAL_FOLDER, "foo"), os.O_CREAT)
@@ -383,7 +392,7 @@ def test_exclude():
 
     _sync(exclude=t_path("exclude"))
 
-    assert not set(os.listdir(REMOTE_PATH)) & exclused
+    assert not set(os.listdir(REMOTE_PATH)) & excluded
 
 
 @with_setup(setup_test, teardown_test)
@@ -399,7 +408,7 @@ def test_inner_exclude():
     _sync(exclude=t_path("exclude"))
 
     assert set(os.listdir(join(REMOTE_PATH, "bar"))) == {"file_one", "inner"}
-    assert set(os.listdir(join(REMOTE_PATH, "bar", "inner"))) == {"bar"}
+    eq_(set(os.listdir(join(REMOTE_PATH, "bar", "inner"))), {"bar"})
 
 
 @with_setup(setup_test, teardown_test)
@@ -639,3 +648,67 @@ def test_remote_but_not_local_directories():
     for f in full_dirs:
         assert os.listdir(join(REMOTE_PATH, f)) == os.listdir(
             join(LOCAL_FOLDER, f))
+
+
+@with_setup(setup_test, teardown_test)
+def test_remote_dot_not_delete():
+    """Test do not delete missing local files on remote end."""
+    normal_files = ("bar", "bis")  # just to add noise
+    for f in normal_files:
+        os.open(join(LOCAL_FOLDER, f), os.O_CREAT)
+        os.open(join(REMOTE_PATH, f), os.O_CREAT)
+
+    normal_dir = "dir"
+    os.mkdir(join(LOCAL_FOLDER, normal_dir))
+
+    remote_only = ("remote", "only")  # just to add noise
+    for f in remote_only:
+        os.open(join(REMOTE_PATH, f), os.O_CREAT)
+
+    remote_dir = "remote_dir"
+    os.mkdir(join(REMOTE_PATH, remote_dir))
+
+    _sync(delete=False)
+
+    local = set(file_tree(LOCAL_FOLDER)[LOCAL_FOLDER_NAME].keys())
+    remote = set(file_tree(REMOTE_PATH)[REMOTE_FOLDER].keys())
+    normal_files = set(normal_files)
+    remote_only = set(remote_only)
+
+    assert local < remote
+    assert normal_files < remote
+    assert normal_dir in remote
+    assert remote_only < remote
+    assert remote_dir in remote
+    assert remote_dir not in local
+    assert not remote_only & local
+
+
+@with_setup(setup_test, teardown_test)
+def test_handle_unicode_files():
+    """Test handling unicode files."""
+    files = ("à", "é")
+    for f in files:
+        os.open(join(LOCAL_FOLDER, f), os.O_CREAT)
+
+    local_dir = "container"
+    os.mkdir(join(LOCAL_FOLDER, local_dir))
+
+    unicode_name = "Sağlayıcısı"
+    os.open(join(LOCAL_FOLDER, local_dir, unicode_name), os.O_CREAT)
+
+    directory = "ò"
+    os.mkdir(join(REMOTE_PATH, directory))
+
+    _sync()
+
+    remote_files = os.listdir(REMOTE_PATH)
+
+    _u = functools.partial(unicodedata.normalize, "NFKD")
+
+    remote_files = {_u(c) for c in remote_files}
+    files = {_u(c) for c in files}
+    files |= {_u("container")}
+    assert remote_files == files
+    assert _u(unicode_name) in (_u(f) for f in os.listdir(join(REMOTE_PATH, "container")))
+

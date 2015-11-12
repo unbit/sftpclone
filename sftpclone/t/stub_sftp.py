@@ -83,8 +83,9 @@ class StubSFTPServer (SFTPServerInterface):
             flist = os.listdir(path)
             for fname in flist:
                 attr = SFTPAttributes.from_stat(
-                    os.lstat(os.path.join(path, fname)))
-                attr.filename = fname
+                    os.lstat(os.path.join(path, fname))
+                )
+                attr.filename = fname.encode("utf-8")
                 out.append(attr)
             return out
         except OSError as e:
