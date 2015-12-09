@@ -168,18 +168,18 @@ _sync.__test__ = False
 @contextmanager
 def capture_sys_output():
     """Capture standard output and error."""
-    caputure_out, capture_err = StringIO(), StringIO()
+    capture_out, capture_err = StringIO(), StringIO()
     current_out, current_err = sys.stdout, sys.stderr
     try:
-        sys.stdout, sys.stderr = caputure_out, capture_err
-        yield caputure_out, capture_err
+        sys.stdout, sys.stderr = capture_out, capture_err
+        yield capture_out, capture_err
     finally:
         sys.stdout, sys.stderr = current_out, current_err
 
 
 @contextmanager
 def override_env_variables():
-    """Override user enviromental variables with custom one."""
+    """Override user environmental variables with custom one."""
     vars = ("LOGNAME", "USER", "LNAME", "USERNAME")
     old = [os.environ[v] if v in os.environ else None for v in vars]
 
@@ -293,7 +293,7 @@ def test_remote_tilde_home():
         LOCAL_FOLDER,
         remote_url='test@127.0.0.1:' + '~' + REMOTE_FOLDER,
         port=2222,
-        identity_files=[t_path("id_rsa"),]
+        identity_files=[t_path("id_rsa"), ]
     )
     sync.run()
 

@@ -184,7 +184,7 @@ class SFTPClone(object):
 
             """
             Before starting the transport session, we have to configure it.
-            Specifically, we need to configured the preferred PK algorithm.
+            Specifically, we need to configure the preferred PK algorithm.
             If the system already knows a public key of a specific kind for
             a remote host, we have to peek its type as the preferred one.
             """
@@ -287,12 +287,12 @@ class SFTPClone(object):
 
                         try:
                             key = paramiko.RSAKey.from_private_key_file(key_path, pk_password)
-                        except paramiko.ssh_exception.SSHException:
+                        except paramiko.SSHException:
                             self.logger.error(
                                 "Incorrect passphrase. Cannot decode private key from '{}'.".format(key_path)
                             )
                             continue
-                    except IOError or paramiko.ssh_exception.SSHException:
+                    except IOError or paramiko.SSHException:
                         self.logger.error(
                             "Something went wrong while opening '{}'. Skipping it.".format(key_path)
                         )
@@ -642,7 +642,7 @@ def create_parser():
     parser.add_argument(
         "-c",
         "--ssh-config",
-        metavar="ssh config path",
+        metavar="ssh_config path",
         default="~/.ssh/config",
         type=str,
         help="path to the ssh-configuration file (default to ~/.ssh/config)"
@@ -692,7 +692,6 @@ def create_parser():
 def main(args=None):
     """The main."""
     parser = create_parser()
-
     args = vars(parser.parse_args(args))
 
     log_mapping = {
