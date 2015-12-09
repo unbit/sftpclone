@@ -97,17 +97,15 @@ class SFTPClone(object):
             self.exclude_list = set()
 
         if '@' in remote_url:
-            self.username, self.hostname = remote_url.split('@', 1)
+            username, hostname = remote_url.split('@', 1)
         else:
-            self.username, self.hostname = None, remote_url
+            username, hostname = None, remote_url
 
-        self.hostname, self.remote_path = self.hostname.split(':', 1)
+        hostname, self.remote_path = hostname.split(':', 1)
 
-        self.password = None
-        if self.username and ':' in self.username:
-            self.username, self.password = self.username.split(':', 1)
-
-        self.port = None
+        password = None
+        if username and ':' in username:
+            username, password = username.split(':', 1)
 
         identity_files = identity_files or []
         if ssh_config_path:
@@ -115,11 +113,11 @@ class SFTPClone(object):
                 with open(os.path.expanduser(ssh_config_path)) as c_file:
                     ssh_config = paramiko.SSHConfig()
                     ssh_config.parse(c_file)
-                    c = ssh_config.lookup(self.hostname)
+                    c = ssh_config.lookup(hostname)
 
-                    self.hostname = c.get("hostname", self.hostname)
-                    self.username = c.get("user", self.username)
-                    self.port = int(c.get("port", port))
+                    hostname = c.get("hostname", hostname)
+                    username = c.get("user", username)
+                    port = int(c.get("port", port))
                     identity_files = c.get("identityfile", identity_files)
             except Exception as e:
                 # it could be safe to continue anyway,
@@ -129,26 +127,25 @@ class SFTPClone(object):
                 )
 
         # Set default values
-        if not self.username:
-            self.username = getuser()  # defaults to current user
+        if not username:
+            username = getuser()  # defaults to current user
 
-        if not self.port:
-            self.port = port or 22
+        port = port or 22
+        allow_unknown = allow_unknown or False
 
         self.chown = False
         self.fix_symlinks = fix_symlinks or False
         self.delete = delete if delete is not None else True
-        self.allow_unknown = allow_unknown or False
 
-        self.agent_keys = list()
+        agent_keys = list()
         agent = None
 
         if ssh_agent:
             try:
                 agent = paramiko.agent.Agent()
-                self.agent_keys.append(*agent.get_keys())
+                agent_keys.append(*agent.get_keys())
 
-                if not self.agent_keys:
+                if not agent_keys:
                     agent.close()
                     self.logger.error(
                         "SSH agent didn't provide any valid key. Trying to continue..."
@@ -160,26 +157,25 @@ class SFTPClone(object):
                 self.logger.error(
                     "SSH agent speaks a non-compatible protocol. Ignoring it.")
 
-        if not identity_files and not self.password and not self.agent_keys:
+        if not identity_files and not password and not agent_keys:
             self.logger.error(
                 "You need to specify either a password, an identity or to enable the ssh-agent support."
             )
             sys.exit(1)
 
         # only root can change file owner
-        if self.username == 'root':
+        if username == 'root':
             self.chown = True
 
         try:
-            self.transport = paramiko.Transport((self.hostname, self.port))
+            transport = paramiko.Transport((hostname, port))
         except socket.gaierror:
             self.logger.error(
                 "Hostname not known. Are you sure you inserted it correctly?")
             sys.exit(1)
 
         try:
-            ssh_host = self.hostname if self.port == 22 else "[{}]:{}".format(
-                self.hostname, self.port)
+            ssh_host = hostname if port == 22 else "[{}]:{}".format(hostname, port)
             known_hosts = None
 
             """
@@ -206,15 +202,15 @@ class SFTPClone(object):
                 if known_keys is not None:
                     # one or more keys are already known
                     # set their type as preferred
-                    self.transport.get_security_options().key_types = \
+                    transport.get_security_options().key_types = \
                         tuple(known_keys.keys())
 
-            self.transport.start_client()
+            transport.start_client()
 
             if not known_hosts:
                 self.logger.warning("Security warning: skipping known hosts check...")
             else:
-                pubk = self.transport.get_remote_server_key()
+                pubk = transport.get_remote_server_key()
                 if ssh_host in known_hosts.keys():
                     if not known_hosts.check(ssh_host, pubk):
                         self.logger.error(
@@ -224,11 +220,11 @@ class SFTPClone(object):
                             "Exiting...".format(
                                 pubk.get_base64(),
                                 ssh_host,
-                                known_hosts.lookup(self.hostname),
+                                known_hosts.lookup(hostname),
                             )
                         )
                         sys.exit(1)
-                elif not self.allow_unknown:
+                elif not allow_unknown:
                     prompt = ("The authenticity of host '{}' can't be established.\n"
                               "{} key is {}.\n"
                               "Are you sure you want to continue connecting? [y/n] ").format(
@@ -250,8 +246,8 @@ class SFTPClone(object):
 
             def perform_key_auth(pkey):
                 try:
-                    self.transport.auth_publickey(
-                        username=self.username,
+                    transport.auth_publickey(
+                        username=username,
                         key=pkey
                     )
                     return True
@@ -261,13 +257,13 @@ class SFTPClone(object):
                     )
                     return False
 
-            if self.password:  # Password auth, if specified.
-                self.transport.auth_password(
-                    username=self.username,
-                    password=self.password
+            if password:  # Password auth, if specified.
+                transport.auth_password(
+                    username=username,
+                    password=password
                 )
-            elif self.agent_keys:  # SSH agent keys have higher priority
-                for pkey in self.agent_keys:
+            elif agent_keys:  # SSH agent keys have higher priority
+                for pkey in agent_keys:
                     if perform_key_auth(pkey):
                         break  # Authentication worked.
                 else:  # None of the keys worked.
@@ -309,13 +305,13 @@ class SFTPClone(object):
             self.logger.error(
                 "None of the provided authentication methods worked. Exiting."
             )
-            self.transport.close()
+            transport.close()
             sys.exit(1)
         finally:
             if agent:
                 agent.close()
 
-        self.sftp = paramiko.SFTPClient.from_transport(self.transport)
+        self.sftp = paramiko.SFTPClient.from_transport(transport)
 
         if self.remote_path.startswith("~"):
             # nasty hack to let getcwd work without changing dir!
