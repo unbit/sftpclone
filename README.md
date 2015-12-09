@@ -45,7 +45,7 @@ Where, for each command line argument:
 * **local-path**: The path of the local folder. This path must exists and can contain `~` (we use tilde expansion).
 * **sftp-url**: It specifies the remote SFTP url having the form: `[user[:password]@]hostname:remote-path`. Both the password and the user field can be omitted. If you omit the former then you should specify a private key identity file. If you omit the latter then the current user is automatically used. The hostname can refer to a element of your `ssh_config` file. If the remote path contains `~`, then it will be expanded to the default folder in which the user begins her SFTP session.
 * **[h]elp**: show the help message and exit.
-* **private-[k]ey-path**: the path to your private identity file. Set it if you are not using password authentication. It automatically defaults to `~/.ssh/id_rsa`.
+* **private-[k]ey-path**: the path to your private identity file. Set it if you are not using password authentication. It automatically defaults to `~/.ssh/id_rsa` and can be used more than once.
 * **[l]ogging**: set the log level (ERROR by default).
 * **[p]ort**: SSH remote port (defaults to 22).
 * **[f]ix-symlinks**: if you have absolute symlinks pointing to your synced directory, they will remain consistent on the remote server: i.e., they will have an absolute path that reflect the path of the cloned directory on the server. Useful for cluster configurations.

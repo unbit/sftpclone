@@ -63,7 +63,7 @@ class SFTPClone(object):
     """The SFTPClone class."""
 
     def __init__(self, local_path, remote_url,
-                 key=None, port=None, fix_symlinks=False,
+                 identity_files=None, port=None, fix_symlinks=False,
                  ssh_config_path=None, ssh_agent=False,
                  exclude_file=None, known_hosts_path=None,
                  delete=True, allow_unknown=False
@@ -109,6 +109,7 @@ class SFTPClone(object):
 
         self.port = None
 
+        identity_files = identity_files or []
         if ssh_config_path:
             try:
                 with open(os.path.expanduser(ssh_config_path)) as c_file:
@@ -119,7 +120,7 @@ class SFTPClone(object):
                     self.hostname = c.get("hostname", self.hostname)
                     self.username = c.get("user", self.username)
                     self.port = int(c.get("port", port))
-                    key = c.get("identityfile", key)
+                    identity_files = c.get("identityfile", identity_files)
             except Exception as e:
                 # it could be safe to continue anyway,
                 # because parameters could have been manually specified
@@ -139,14 +140,15 @@ class SFTPClone(object):
         self.delete = delete if delete is not None else True
         self.allow_unknown = allow_unknown or False
 
-        self.pkeys = list()
+        self.agent_keys = list()
+
         if ssh_agent:
             agent = None
             try:
                 agent = paramiko.agent.Agent()
-                self.pkeys.append(*agent.get_keys())
+                self.agent_keys.append(*agent.get_keys())
 
-                if not self.pkeys:
+                if not self.agent_keys:
                     agent.close()
                     self.logger.error(
                         "SSH agent didn't provide any valid key. Trying to continue..."
@@ -158,32 +160,7 @@ class SFTPClone(object):
                 self.logger.error(
                     "SSH agent speaks a non-compatible protocol. Ignoring it.")
 
-        if key and not self.password and not self.pkeys:
-            key = os.path.expanduser(key)
-            try:
-                self.pkeys.append(paramiko.RSAKey.from_private_key_file(key))
-            except paramiko.PasswordRequiredException:
-                pk_password = getpass(
-                    "It seems that your private key is encrypted. Please enter your password: "
-                )
-                try:
-                    self.pkeys.append(
-                        paramiko.RSAKey.from_private_key_file(
-                            key, pk_password
-                        )
-                    )
-                except paramiko.ssh_exception.SSHException:
-                    self.logger.error(
-                        "Incorrect passphrase. Cannot decode private key."
-                    )
-                    sys.exit(1)
-            except IOError or paramiko.ssh_exception.SSHException:
-                self.logger.error(
-                    "Something went wrong while opening {}. Exiting.".format(
-                        key)
-                )
-                sys.exit(1)
-        elif not key and not self.password and not self.pkeys:
+        if not identity_files and not self.password and not self.agent_keys:
             self.logger.error(
                 "You need to specify either a password, an identity or to enable the ssh-agent support."
             )
@@ -271,27 +248,63 @@ class SFTPClone(object):
                         )
                         sys.exit(1)
 
-            if self.password:
+            def perform_key_auth(pkey):
+                try:
+                    self.transport.auth_publickey(
+                        username=self.username,
+                        key=pkey
+                    )
+                    return True
+                except paramiko.SSHException:
+                    self.logger.warning(
+                        "Authentication with identity {}... failed".format(pkey.get_base64()[:10])
+                    )
+                    return False
+
+            if self.password:  # Password auth, if specified.
                 self.transport.auth_password(
                     username=self.username,
                     password=self.password
                 )
-            else:
-                for pkey in self.pkeys:
-                    try:
-                        self.transport.auth_publickey(
-                            username=self.username,
-                            key=pkey
-                        )
-                        break
-                    except paramiko.SSHException:
-                        self.logger.warning(
-                            "Authentication with identity {}... failed".format(
-                                pkey.get_base64()[:10]
-                            )
-                        )
-                else:  # none of the keys worked
+            elif self.agent_keys:  # SSH agent keys have higher priority
+                for pkey in self.agent_keys:
+                    if perform_key_auth(pkey):
+                        break  # Authentication worked.
+                else:  # None of the keys worked.
                     raise paramiko.SSHException
+            elif identity_files:  # Then follow identity file (specified from CL or ssh_config)
+                # Try identity files one by one, until one works
+                for key_path in identity_files:
+                    key_path = os.path.expanduser(key_path)
+
+                    try:
+                        key = paramiko.RSAKey.from_private_key_file(key_path)
+                    except paramiko.PasswordRequiredException:
+                        pk_password = getpass(
+                            "It seems that your identity from '{}' is encrypted. "
+                            "Please enter your password: ".format(key_path)
+                        )
+
+                        try:
+                            key = paramiko.RSAKey.from_private_key_file(key_path, pk_password)
+                        except paramiko.ssh_exception.SSHException:
+                            self.logger.error(
+                                "Incorrect passphrase. Cannot decode private key from '{}'.".format(key_path)
+                            )
+                            continue
+                    except IOError or paramiko.ssh_exception.SSHException:
+                        self.logger.error(
+                            "Something went wrong while opening '{}'. Skipping it.".format(key_path)
+                        )
+                        continue
+
+                    if perform_key_auth(key):
+                        break  # Authentication worked.
+
+                else:  # None of the keys worked.
+                    raise paramiko.SSHException
+            else:  # No authentication method specified, we shouldn't arrive here.
+                assert False
         except paramiko.SSHException:
             self.logger.error(
                 "None of the provided authentication methods worked. Exiting."
@@ -583,9 +596,8 @@ def create_parser():
     parser.add_argument(
         "-k",
         "--key",
-        metavar="private-key-path",
-        default="~/.ssh/id_rsa",
-        type=str,
+        metavar="identity-path",
+        action="append",
         help="private key identity path (defaults to ~/.ssh/id_rsa)"
     )
 
@@ -700,7 +712,8 @@ def main(args=None):
         "ssh_config": "ssh_config_path",
         "exclude_from": "exclude_file",
         "known_hosts": "known_hosts_path",
-        "do_not_delete": "delete"
+        "do_not_delete": "delete",
+        "key": "identity_files",
     }
 
     kwargs = {  # convert the argument names to class constructor parameters
@@ -723,6 +736,9 @@ def main(args=None):
     # Toggle `do_not_delete` flag
     if "delete" in kwargs:
         kwargs["delete"] = not kwargs["delete"]
+
+    # Manually set the default identity file.
+    kwargs["identity_files"] = kwargs.get("identity_files", None) or ["~/.ssh/id_rsa"]
 
     sync = SFTPClone(
         **kwargs

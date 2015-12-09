@@ -147,7 +147,7 @@ def _sync(
         remote,
         port=2222,
         fix_symlinks=fix,
-        key=t_path("id_rsa"),
+        identity_files=[t_path("id_rsa")],
         exclude_file=exclude,
         ssh_agent=ssh_agent,
         delete=delete
@@ -293,7 +293,7 @@ def test_remote_tilde_home():
         LOCAL_FOLDER,
         remote_url='test@127.0.0.1:' + '~' + REMOTE_FOLDER,
         port=2222,
-        key=t_path("id_rsa")
+        identity_files=[t_path("id_rsa"),]
     )
     sync.run()
 
