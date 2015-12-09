@@ -141,9 +141,9 @@ class SFTPClone(object):
         self.allow_unknown = allow_unknown or False
 
         self.agent_keys = list()
+        agent = None
 
         if ssh_agent:
-            agent = None
             try:
                 agent = paramiko.agent.Agent()
                 self.agent_keys.append(*agent.get_keys())
@@ -311,6 +311,9 @@ class SFTPClone(object):
             )
             self.transport.close()
             sys.exit(1)
+        finally:
+            if agent:
+                agent.close()
 
         self.sftp = paramiko.SFTPClient.from_transport(self.transport)
 
