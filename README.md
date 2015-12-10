@@ -67,7 +67,7 @@ The synchronization process will indeed delete any file that doesn't exist in th
 
 The hostname in the sftp-url parameter can be a valid entry in a `ssh_config` file. Specifically, your entry should have relevant parameters such as:
 
-* `Hostame`
+* `HostName`
 * `User`
 * `Port`
 * `IdentityFile`
