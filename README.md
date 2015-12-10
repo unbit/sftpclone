@@ -1,19 +1,21 @@
-#sftpclone
+# sftpclone
+
 
 A tool for cloning/syncing a local directory tree with an SFTP server.
 
-##Features
+## Features
 
 * Keep in sync a local directory tree with a specified folder of an SFTP server.
 * Update symbolic links as needed and keep files _consistent_.
 * Automatic tilde expansion/handling on the SFTP server.
 * Public key authentication.
-* ssh_config entries compatibility.
+* `ssh_config` entries compatibility.
 * Syncing exclusion patterns.
 * Compatible with both Python 2 and Python 3.
 
-##Install
+## Install
 You can install sftpclone by using pip:
+
 ```bash
 $ pip install sftpclone --user
 ```
@@ -22,6 +24,7 @@ $ pip install sftpclone --user
 Alternatively, you could make use of a virtualenv.
 
 Alternatively, you can clone this repository and then launch:
+
 ```bash
 $ git clone https://github.com/unbit/sftpclone
 $ cd sftpclone
@@ -30,7 +33,7 @@ $ python setup.py install
 
 In both cases, you'll find the sftpclone script in your path.
 
-##Usage
+## Usage
 
 ```
 usage: sftpclone [-h] [-k private-key-path]
@@ -60,11 +63,12 @@ Where, for each command line argument:
 **Warning**: be sure to select a __proper__ remote folder. 
 The synchronization process will indeed delete any file that doesn't exist in the local folder (unless you turn the `-t` option on).
 
-##ssh_config compatibility
+## `ssh_config` compatibility
+
 The hostname in the sftp-url parameter can be a valid entry in a `ssh_config` file. Specifically, your entry should have relevant parameters such as:
 
-* `Hostname`
-* `Username`
+* `Hostame`
+* `User`
 * `Port`
 * `IdentityFile`
 
@@ -72,14 +76,16 @@ Any value not found will fallback to the CLI arguments.
 Anyway, you _have to set_ the `IdentityFile` field, otherwise authentication will try to fallback to `~/.ssh/id_rsa` and could not work.
 The first hostname matching the pattern is chosen (in the `ssh_config` way).
 
-##known_hosts checking
+## known_hosts checking
+
 By default sftpclone will match the remote host fingerprint against the one contained in your `~/.ssh/known_hosts` file.
 If this file doesn't exists on your machine, you can specify a different path by using the `-n` option.
 Furthermore, you can disable the check with the `-d` flag.
 Unknown hosts will require the user to authorize the connection. Please note that, even after authorization, the `known_host`
 file won't be modified.
 
-##Exclude list
+## Exclude list
+
 It takes inspiration from the rsync/tar `--exclude-from` flag.
 
 You can specify among your command line arguments a file containing a list of patterns, one per each line.
@@ -89,7 +95,8 @@ Lines beginning with `;` or `#` are ignored.
 
 Each pattern is considered relative to the syncing directory. As a consequence, leading `/` are ignored.
 
-###Example
+### Example
+
 ```ini
 ; This will exclude any file or directory beginning with foo
 foo*
@@ -97,7 +104,8 @@ foo*
 bar/*/foo
 ```
 
-##Testing
+## Testing
+
 This project uses [nose](https://nose.readthedocs.org/en/latest/) for testing.
 
 You can test it by launching from the project root directory:
