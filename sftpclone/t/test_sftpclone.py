@@ -49,6 +49,8 @@ REMOTE_PATH = join(REMOTE_ROOT, REMOTE_FOLDER)
 LOCAL_FOLDER_NAME = "local_folder"
 LOCAL_FOLDER = t_path(LOCAL_FOLDER_NAME)
 
+_u = functools.partial(unicodedata.normalize, "NFKD")
+
 event = threading.Event()
 
 # attach existing loggers (use --nologcapture option to see output)
@@ -704,11 +706,22 @@ def test_handle_unicode_files():
 
     remote_files = os.listdir(REMOTE_PATH)
 
-    _u = functools.partial(unicodedata.normalize, "NFKD")
-
     remote_files = {_u(c) for c in remote_files}
     files = {_u(c) for c in files}
     files |= {_u("container")}
     assert remote_files == files
     assert _u(unicode_name) in (_u(f) for f in os.listdir(join(REMOTE_PATH, "container")))
 
+
+@with_setup(setup_test, teardown_test)
+def test_long_unicode_file():
+    """Test handling long unicode file-names."""
+    long_file = "x" * 198 + "à"
+    os.open(join(LOCAL_FOLDER, long_file), os.O_CREAT)
+
+    _sync()
+
+    remote_files = os.listdir(REMOTE_PATH)
+    assert _u(long_file) in {_u(c) for c in remote_files}
+
+    _sync()
