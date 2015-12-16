@@ -143,13 +143,15 @@ class SFTPClone(object):
         if ssh_agent:
             try:
                 agent = paramiko.agent.Agent()
-                agent_keys.append(*agent.get_keys())
+                _agent_keys = agent.get_keys()
 
-                if not agent_keys:
+                if not _agent_keys:
                     agent.close()
                     self.logger.error(
                         "SSH agent didn't provide any valid key. Trying to continue..."
                     )
+                else:
+                    agent_keys.append(*_agent_keys)
 
             except paramiko.SSHException:
                 if agent:

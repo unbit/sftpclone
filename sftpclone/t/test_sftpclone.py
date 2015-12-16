@@ -194,6 +194,20 @@ def override_env_variables():
             os.environ[v] = old[i]
 
 
+@contextmanager
+def override_ssh_auth_env():
+    """Override the $SSH_AUTH_SOCK env variable, to mock the absence of an SSH agent."""
+    ssh_auth_sock = "SSH_AUTH_SOCK"
+    old_ssh_auth_sock = os.environ.get(ssh_auth_sock)
+
+    del os.environ[ssh_auth_sock]
+
+    yield
+
+    if old_ssh_auth_sock:
+        os.environ[ssh_auth_sock] = old_ssh_auth_sock
+
+
 class SuppressLogging:
 
     """Context handler class that suppresses logging for some controlled code."""
@@ -314,6 +328,15 @@ def test_ssh_agent_failure():
     # Suppress STDERR
     with SuppressLogging():
         with capture_sys_output():
+            _sync(ssh_agent=True)
+
+
+@with_setup(setup_test, teardown_test)
+def test_no_ssh_agent():
+    """Test without a running SSH agent."""
+    # Suppress STDERR
+    with SuppressLogging():
+        with override_ssh_auth_env():
             _sync(ssh_agent=True)
 
 
