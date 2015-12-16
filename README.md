@@ -104,6 +104,10 @@ foo*
 bar/*/foo
 ```
 
+## Programmatic usage
+
+You can find some examples of programmatic usage inside the [examples](examples) directory.
+
 ## Testing
 
 This project uses [nose](https://nose.readthedocs.org/en/latest/) for testing.
