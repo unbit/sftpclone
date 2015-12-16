@@ -1,8 +1,8 @@
 # sftpclone
 
-[![PyPI version](https://img.shields.io/pypi/v/sftpclone.svg?style=flat-square)](https://img.shields.io/pypi/v/sftpclone.svg?style=flat-square)
-[![PyPI python version](https://img.shields.io/pypi/pyversions/sftpclone.svg?style=flat-square)](https://img.shields.io/pypi/pyversions/sftpclone.svg?style=flat-square)
-[![PyPI license](https://img.shields.io/pypi/l/sftpclone.svg?style=flat-square)](https://img.shields.io/pypi/l/sftpclone.svg?style=flat-square)
+[![PyPI version](https://img.shields.io/pypi/v/sftpclone.svg?style=flat-square)](https://pypi.python.org/pypi/sftpclone)
+![PyPI python version](https://img.shields.io/pypi/pyversions/sftpclone.svg?style=flat-square)
+[![PyPI license](https://img.shields.io/pypi/l/sftpclone.svg?style=flat-square)](LICENSE)
 
 A tool for cloning/syncing a local directory tree with an SFTP server.
 
