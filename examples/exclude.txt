@@ -1,0 +1,2 @@
+# Exclude ./build/README.md from the deployed site.
+README.md
