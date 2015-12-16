@@ -1,5 +1,8 @@
 # sftpclone
 
+[![PyPI version](https://img.shields.io/pypi/v/sftpclone.svg?style=flat-square)](https://img.shields.io/pypi/v/sftpclone.svg?style=flat-square)
+[![PyPI python version](https://img.shields.io/pypi/pyversions/sftpclone.svg?style=flat-square)](https://img.shields.io/pypi/pyversions/sftpclone.svg?style=flat-square)
+[![PyPI license](https://img.shields.io/pypi/l/sftpclone.svg?style=flat-square)](https://img.shields.io/pypi/l/sftpclone.svg?style=flat-square)
 
 A tool for cloning/syncing a local directory tree with an SFTP server.
 
@@ -76,7 +79,7 @@ Any value not found will fallback to the CLI arguments.
 Anyway, you _have to set_ the `IdentityFile` field, otherwise authentication will try to fallback to `~/.ssh/id_rsa` and could not work.
 The first hostname matching the pattern is chosen (in the `ssh_config` way).
 
-## known_hosts checking
+## `known_hosts` checking
 
 By default sftpclone will match the remote host fingerprint against the one contained in your `~/.ssh/known_hosts` file.
 If this file doesn't exists on your machine, you can specify a different path by using the `-n` option.
