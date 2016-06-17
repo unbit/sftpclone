@@ -115,8 +115,14 @@ You can find some examples of programmatic usage inside the [examples](examples)
 ## Testing
 
 This project uses [nose](https://nose.readthedocs.org/en/latest/) for testing.
+In addition, on Python 2 you'll need the `mock` module (part of Python standard lib from 3.3).
+In both cases, you can install test requirements with:
 
-You can test it by launching from the project root directory:
+```bash
+$ pip install -r test_requirements.txt
+```
+
+Then, You can launch the test suite by using, from the project root directory:
 ```bash
 $ nosetests
 $ python setup.py test # alternatively

@@ -84,6 +84,34 @@ def parse_username_password_hostname(remote_url):
     return username, password, hostname, remote_path
 
 
+def get_ssh_agent_keys(logger):
+    """
+    Ask the SSH agent for a list of keys, and return it.
+
+    :return: A reference to the SSH agent and a list of keys.
+    """
+    agent, agent_keys = None, None
+
+    try:
+        agent = paramiko.agent.Agent()
+        _agent_keys = agent.get_keys()
+
+        if not _agent_keys:
+            agent.close()
+            logger.error(
+                "SSH agent didn't provide any valid key. Trying to continue..."
+            )
+        else:
+            agent_keys = tuple(k for k in _agent_keys)
+    except paramiko.SSHException:
+        if agent:
+            agent.close()
+            agent = None
+        logger.error("SSH agent speaks a non-compatible protocol. Ignoring it.")
+    finally:
+        return agent, agent_keys
+
+
 class SFTPClone(object):
 
     """The SFTPClone class."""
@@ -156,28 +184,10 @@ class SFTPClone(object):
         self.fix_symlinks = fix_symlinks or False
         self.delete = delete if delete is not None else True
 
-        agent_keys = list()
-        agent = None
-
         if ssh_agent:
-            try:
-                agent = paramiko.agent.Agent()
-                _agent_keys = agent.get_keys()
-
-                if not _agent_keys:
-                    agent.close()
-                    self.logger.error(
-                        "SSH agent didn't provide any valid key. Trying to continue..."
-                    )
-                else:
-                    for _agent_key in _agent_keys:
-                        agent_keys.append(_agent_key)
-
-            except paramiko.SSHException:
-                if agent:
-                    agent.close()
-                self.logger.error(
-                    "SSH agent speaks a non-compatible protocol. Ignoring it.")
+            agent, agent_keys = get_ssh_agent_keys(self.logger)
+        else:
+            agent, agent_keys = None, None
 
         if not identity_files and not password and not agent_keys:
             self.logger.error(

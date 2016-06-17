@@ -16,7 +16,9 @@ import unicodedata
 
 from sftpclone.t.stub_sftp import StubServer, StubSFTPServer
 from sftpclone.t.utils import t_path, list_files, file_tree
-from sftpclone.sftpclone import SFTPClone, main, parse_username_password_hostname
+
+from sftpclone.sftpclone import SFTPClone, main, \
+    parse_username_password_hostname, get_ssh_agent_keys
 
 import threading
 import os
@@ -41,6 +43,11 @@ if sys.version_info > (3, 0):
     from io import StringIO
 else:
     from StringIO import StringIO
+
+try:  # Python >= 3.3
+    import unittest.mock as mock
+except ImportError:
+    import mock  # Python 2, external module.
 
 REMOTE_ROOT = t_path("server_root")
 REMOTE_FOLDER = "server_folder"
@@ -130,6 +137,39 @@ def teardown_test():
     rmtree(REMOTE_PATH, ignore_errors=True)
     rmtree(LOCAL_FOLDER, ignore_errors=True)
 teardown_test.__test__ = False
+
+
+def test_get_ssh_agent_keys():
+    """Test getting SSH keys from the SSH agent."""
+
+    logger = logging.getLogger('_')
+    logger.addHandler(logging.NullHandler)
+
+    truth = {('A', 'B', 'C'), ('K',)}
+    for keys in truth:
+        with mock.patch('paramiko.agent.Agent', autospec=paramiko.agent.Agent) \
+                as mocked_agent:
+            mocked_agent.return_value.get_keys.return_value = keys
+            agent, agent_keys = get_ssh_agent_keys(logger)
+            assert agent is mocked_agent.return_value
+            assert agent_keys == keys
+
+    with mock.patch('paramiko.agent.Agent', autospec=paramiko.agent.Agent) \
+            as mocked_agent:
+        keys = []
+        mocked_agent.return_value.get_keys.return_value = keys
+        agent, agent_keys = get_ssh_agent_keys(logger)
+        assert agent is mocked_agent.return_value
+        assert agent_keys is None
+
+    with mock.patch('paramiko.agent.Agent', autospec=paramiko.agent.Agent) \
+            as mocked_agent:
+        def raise_paramiko_exception():
+            raise paramiko.SSHException
+        mocked_agent.return_value.get_keys.side_effect = raise_paramiko_exception
+        agent, agent_keys = get_ssh_agent_keys(logger)
+        assert not agent
+        assert not agent_keys
 
 
 def _sync(

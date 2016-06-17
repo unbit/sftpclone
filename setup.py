@@ -30,7 +30,7 @@ setup(
     packages=['sftpclone'],
     install_requires=['paramiko', ],
     test_suite='nose.collector',
-    tests_require=['nose', ],
+    tests_require=['nose', 'mock', ],
     scripts=['bin/sftpclone', ],
 
     keywords=["sftpclone", "sftp", "sync", "ftp", "ssh", ],
