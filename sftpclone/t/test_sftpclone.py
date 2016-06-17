@@ -16,7 +16,7 @@ import unicodedata
 
 from sftpclone.t.stub_sftp import StubServer, StubSFTPServer
 from sftpclone.t.utils import t_path, list_files, file_tree
-from sftpclone.sftpclone import SFTPClone, main
+from sftpclone.sftpclone import SFTPClone, main, parse_username_password_hostname
 
 import threading
 import os
@@ -239,6 +239,30 @@ def _sync_argv(argv):
             REMOTE_PATH
         )[REMOTE_FOLDER]
 _sync_argv.__test__ = False
+
+
+def test_parse_username_password_hostname():
+    """Test parsing remote url from command line."""
+    ground_truth = {
+        'foo:bar@bis:/test': ('foo', 'bar', 'bis', '/test'),
+        'foo@bis:/test': ('foo', None, 'bis', '/test'),
+        'bis:/test': (None, None, 'bis', '/test'),
+        'a@b@bis:/test': ('a@b', None, 'bis', '/test'),
+        'a@b:password@bis:/test': ('a@b', 'password', 'bis', '/test'),
+    }
+
+    for test, truth in ground_truth.items():
+        assert parse_username_password_hostname(test) == truth
+
+    fail = set((
+        'bis',
+        'bis:',
+        '',
+        ':',
+    ))
+
+    for test in fail:
+        assert_raises(AssertionError, parse_username_password_hostname, test)
 
 
 @with_setup(setup_test, teardown_test)
