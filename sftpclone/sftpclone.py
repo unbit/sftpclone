@@ -125,6 +125,7 @@ class SFTPClone(object):
         username, password, hostname, self.remote_path = parse_username_password_hostname(remote_url)
 
         identity_files = identity_files or []
+        proxy_command = None
         if ssh_config_path:
             try:
                 with open(os.path.expanduser(ssh_config_path)) as c_file:
@@ -136,6 +137,7 @@ class SFTPClone(object):
                     username = c.get("user", username)
                     port = int(c.get("port", port))
                     identity_files = c.get("identityfile", identity_files)
+                    proxy_command = c.get("proxycommand")
             except Exception as e:
                 # it could be safe to continue anyway,
                 # because parameters could have been manually specified
@@ -186,8 +188,12 @@ class SFTPClone(object):
         if username == 'root':
             self.chown = True
 
+        sock = (hostname, port)
+        if proxy_command is not None:
+            sock = paramiko.proxy.ProxyCommand(proxy_command)
+
         try:
-            transport = paramiko.Transport((hostname, port))
+            transport = paramiko.Transport(sock)
         except socket.gaierror:
             self.logger.error(
                 "Hostname not known. Are you sure you inserted it correctly?")
