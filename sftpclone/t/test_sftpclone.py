@@ -320,7 +320,8 @@ def test_cli_args():
              '-f',
              '-k', t_path("id_rsa"),
              '-p', "2222",
-             '-d'
+             '-d',
+             '-c', '/dev/null'
              ],
         )
 
@@ -330,7 +331,8 @@ def test_cli_args():
          '-f',
          '-k', t_path("id_rsa"),
          '-p', "2222",
-         '-d'
+         '-d',
+         '-c', '/dev/null'
          ],
     )
 
