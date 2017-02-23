@@ -19,7 +19,7 @@ def readme():
 
 setup(
     name='sftpclone',
-    version='1.1.2',
+    version='1.2',
     description='A tool for cloning/syncing a local directory tree with an SFTP server.',
     long_description=readme(),
     url='https://github.com/unbit/sftpclone',
