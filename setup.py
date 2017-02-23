@@ -28,7 +28,7 @@ setup(
     author_email='adrianodl@hotmail.it',
 
     packages=['sftpclone'],
-    install_requires=['paramiko', ],
+    install_requires=['paramiko==2.1.2', ],
     test_suite='nose.collector',
     tests_require=['nose', 'mock', ],
     scripts=['bin/sftpclone', ],
