@@ -74,6 +74,7 @@ The hostname in the sftp-url parameter can be a valid entry in a `ssh_config` fi
 * `User`
 * `Port`
 * `IdentityFile`
+* `ProxyCommand`
 
 Any value not found will fallback to the CLI arguments. 
 Anyway, you _have to set_ the `IdentityFile` field, otherwise authentication will try to fallback to `~/.ssh/id_rsa` and could not work.
