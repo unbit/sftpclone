@@ -8,41 +8,32 @@
 # I require paramiko
 
 # Python 2.7 backward compatibility
+from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
-from __future__ import absolute_import
 
+import functools
+import logging
+import os
+import random
+import select
+import socket
+import threading
 import unicodedata
 
-from sftpclone.t.stub_sftp import StubServer, StubSFTPServer
-from sftpclone.t.utils import t_path, list_files, file_tree
-
-from sftpclone.sftpclone import SFTPClone, main, \
-    parse_username_password_hostname, get_ssh_agent_keys
-
-import threading
-import os
 from os.path import join
 from shutil import rmtree, copy
-import random
 from stat import S_ISDIR
-import logging
-import functools
 
 import paramiko
-import socket
-import select
 
 from nose import with_setup
 from nose.tools import assert_raises, raises, eq_
-from contextlib import contextmanager
 
-import sys
-# unicode / string differentiation
-if sys.version_info > (3, 0):
-    from io import StringIO
-else:
-    from StringIO import StringIO
+from sftpclone.sftpclone import SFTPClone, main, parse_username_password_hostname, get_ssh_agent_keys
+from sftpclone.t.stub_sftp import StubServer, StubSFTPServer
+from sftpclone.t.utils import t_path, list_files, file_tree, \
+    suppress_logging, capture_sys_output, override_env_variables, override_ssh_auth_env
 
 try:  # Python >= 3.3
     import unittest.mock as mock
@@ -71,7 +62,7 @@ def _start_sftp_server():
     """Start the SFTP local server."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.setblocking(0)
+    sock.setblocking(False)
     sock.bind(('localhost', 2222))
     sock.listen(10)
 
@@ -79,24 +70,16 @@ def _start_sftp_server():
     others = set()
 
     while not event.is_set():
-        ready_to_read, _, _ = \
-            select.select(
-                reads,
-                others,
-                others,
-                1)
+        ready_to_read, _, _ = select.select(reads, others, others, 1)
 
         if sock in ready_to_read:
             client_socket, address = sock.accept()
             ts = paramiko.Transport(client_socket)
 
-            host_key = paramiko.RSAKey.from_private_key_file(
-                t_path('server_id_rsa')
-            )
+            host_key = paramiko.RSAKey.from_private_key_file(t_path('server_id_rsa'))
             ts.add_server_key(host_key)
             server = StubServer()
-            ts.set_subsystem_handler(
-                'sftp', paramiko.SFTPServer, StubSFTPServer)
+            ts.set_subsystem_handler('sftp', paramiko.SFTPServer, StubSFTPServer)
             ts.start_server(server=server)
 
     sock.close()
@@ -111,8 +94,8 @@ def setup_module():
 
 
 def teardown_module():
-    """Stop the SFTP server by setting its event.
-
+    """
+    Stop the SFTP server by setting its event.
     Clean remaining directories (in case of failures).
     """
     event.set()
@@ -126,6 +109,8 @@ def setup_test():
     """Create the needed directories."""
     os.mkdir(REMOTE_PATH)
     os.mkdir(LOCAL_FOLDER)
+
+
 setup_test.__test__ = False
 
 
@@ -136,47 +121,15 @@ def teardown_test():
 
     rmtree(REMOTE_PATH, ignore_errors=True)
     rmtree(LOCAL_FOLDER, ignore_errors=True)
+
+
 teardown_test.__test__ = False
-
-
-def test_get_ssh_agent_keys():
-    """Test getting SSH keys from the SSH agent."""
-
-    logger = logging.getLogger('_')
-    logger.addHandler(logging.NullHandler)
-
-    truth = {('A', 'B', 'C'), ('K',)}
-    for keys in truth:
-        with mock.patch('paramiko.agent.Agent', autospec=paramiko.agent.Agent) \
-                as mocked_agent:
-            mocked_agent.return_value.get_keys.return_value = keys
-            agent, agent_keys = get_ssh_agent_keys(logger)
-            assert agent is mocked_agent.return_value
-            assert agent_keys == keys
-
-    with mock.patch('paramiko.agent.Agent', autospec=paramiko.agent.Agent) \
-            as mocked_agent:
-        keys = []
-        mocked_agent.return_value.get_keys.return_value = keys
-        agent, agent_keys = get_ssh_agent_keys(logger)
-        assert agent is mocked_agent.return_value
-        assert agent_keys is None
-
-    with mock.patch('paramiko.agent.Agent', autospec=paramiko.agent.Agent) \
-            as mocked_agent:
-        def raise_paramiko_exception():
-            raise paramiko.SSHException
-        mocked_agent.return_value.get_keys.side_effect = raise_paramiko_exception
-        agent, agent_keys = get_ssh_agent_keys(logger)
-        assert not agent
-        assert not agent_keys
 
 
 def _sync(
         password=False, fix=False,
         exclude=None, ssh_agent=False,
         delete=True, identity_files=None,
-
 ):
     """Launch sync and do basic comparison of dir trees."""
     if not password:
@@ -187,7 +140,7 @@ def _sync(
     if identity_files is None:
         identity_files = [t_path("id_rsa")]
 
-    sync = SFTPClone(
+    SFTPClone(
         LOCAL_FOLDER,
         remote,
         port=2222,
@@ -196,92 +149,54 @@ def _sync(
         exclude_file=exclude,
         ssh_agent=ssh_agent,
         delete=delete
-    )
-    sync.run()
+    ).run()
 
     if not exclude and delete:
-        # check the directory trees
-        assert \
-            file_tree(
-                LOCAL_FOLDER
-            )[LOCAL_FOLDER_NAME] == file_tree(
-                REMOTE_PATH
-            )[REMOTE_FOLDER]
+        # Check the directory trees
+        assert file_tree(LOCAL_FOLDER)[LOCAL_FOLDER_NAME] == file_tree(REMOTE_PATH)[REMOTE_FOLDER]
+
+
 _sync.__test__ = False
-
-
-@contextmanager
-def capture_sys_output():
-    """Capture standard output and error."""
-    capture_out, capture_err = StringIO(), StringIO()
-    current_out, current_err = sys.stdout, sys.stderr
-    try:
-        sys.stdout, sys.stderr = capture_out, capture_err
-        yield capture_out, capture_err
-    finally:
-        sys.stdout, sys.stderr = current_out, current_err
-
-
-@contextmanager
-def override_env_variables():
-    """Override user environmental variables with custom one."""
-    vars = ("LOGNAME", "USER", "LNAME", "USERNAME")
-    old = [os.environ[v] if v in os.environ else None for v in vars]
-
-    for v in vars:
-        os.environ[v] = "test"
-    yield
-
-    for i, v in enumerate(vars):
-        if old[i]:
-            os.environ[v] = old[i]
-
-
-@contextmanager
-def override_ssh_auth_env():
-    """Override the $SSH_AUTH_SOCK env variable, to mock the absence of an SSH agent."""
-    ssh_auth_sock = "SSH_AUTH_SOCK"
-    old_ssh_auth_sock = os.environ.get(ssh_auth_sock)
-
-    del os.environ[ssh_auth_sock]
-
-    yield
-
-    if old_ssh_auth_sock:
-        os.environ[ssh_auth_sock] = old_ssh_auth_sock
-
-
-class SuppressLogging:
-
-    """Context handler class that suppresses logging for some controlled code."""
-
-    def __init__(self, loglevel=logging.CRITICAL):
-        """Disable logging."""
-        logging.disable(loglevel)
-        return
-
-    def __enter__(self):
-        """Pass."""
-        return
-
-    def __exit__(self, exctype, excval, exctraceback):
-        """Enable logging again."""
-        logging.disable(logging.NOTSET)
-        return False
 
 
 def _sync_argv(argv):
     """Launch the module's main with given argv and check the result."""
     argv.append("-o")  # allow unknown hosts
     main(argv)
+    assert file_tree(LOCAL_FOLDER)[LOCAL_FOLDER_NAME] == file_tree(REMOTE_PATH)[REMOTE_FOLDER]
 
-    assert \
-        file_tree(
-            LOCAL_FOLDER
-        )[LOCAL_FOLDER_NAME] == file_tree(
-            REMOTE_PATH
-        )[REMOTE_FOLDER]
+
 _sync_argv.__test__ = False
+
+
+def test_get_ssh_agent_keys():
+    """Test getting SSH keys from the SSH agent."""
+    logger = logging.getLogger('_')
+    logger.addHandler(logging.NullHandler)
+
+    truth = {('A', 'B', 'C'), ('K',)}
+    for keys in truth:
+        with mock.patch('paramiko.agent.Agent', autospec=paramiko.agent.Agent) as mocked_agent:
+            mocked_agent.return_value.get_keys.return_value = keys
+            agent, agent_keys = get_ssh_agent_keys(logger)
+            assert agent is mocked_agent.return_value
+            assert agent_keys == keys
+
+    with mock.patch('paramiko.agent.Agent', autospec=paramiko.agent.Agent) as mocked_agent:
+        keys = []
+        mocked_agent.return_value.get_keys.return_value = keys
+        agent, agent_keys = get_ssh_agent_keys(logger)
+        assert agent is mocked_agent.return_value
+        assert agent_keys is None
+
+    with mock.patch('paramiko.agent.Agent', autospec=paramiko.agent.Agent) as mocked_agent:
+        def _raise_paramiko_exception():
+            raise paramiko.SSHException
+
+        mocked_agent.return_value.get_keys.side_effect = _raise_paramiko_exception
+        agent, agent_keys = get_ssh_agent_keys(logger)
+        assert not agent
+        assert not agent_keys
 
 
 def test_parse_username_password_hostname():
@@ -297,12 +212,7 @@ def test_parse_username_password_hostname():
     for test, truth in ground_truth.items():
         assert parse_username_password_hostname(test) == truth
 
-    fail = set((
-        'bis',
-        'bis:',
-        '',
-        ':',
-    ))
+    fail = {'bis', 'bis:', '', ':'}
 
     for test in fail:
         assert_raises(AssertionError, parse_username_password_hostname, test)
@@ -382,20 +292,15 @@ def test_remote_tilde_home():
     )
     sync.run()
 
-    assert \
-        file_tree(
-            LOCAL_FOLDER
-        )[LOCAL_FOLDER_NAME] == file_tree(
-            REMOTE_PATH
-        )[REMOTE_FOLDER]
+    assert file_tree(LOCAL_FOLDER)[LOCAL_FOLDER_NAME] == file_tree(REMOTE_PATH)[REMOTE_FOLDER]
 
 
 @with_setup(setup_test, teardown_test)
 @raises(SystemExit)
 def test_ssh_agent_failure():
     """Test ssh_agent failure with bad keys (default)."""
-    # Suppress STDERR
-    with SuppressLogging():
+    # Suppress logging and stdout/stderr
+    with suppress_logging():
         with capture_sys_output():
             _sync(ssh_agent=True, identity_files=[])
 
@@ -403,8 +308,8 @@ def test_ssh_agent_failure():
 @with_setup(setup_test, teardown_test)
 def test_no_ssh_agent():
     """Test without a running SSH agent."""
-    # Suppress STDERR
-    with SuppressLogging():
+    # Suppress logging and stdout/stderr
+    with suppress_logging():
         with override_ssh_auth_env():
             _sync(ssh_agent=True)
 
@@ -569,7 +474,7 @@ def test_local_absolute_link():
 
     for link_name, source in outside_symlinks.items():
         assert os.readlink(join(REMOTE_PATH, link_name))[
-            len(REMOTE_ROOT):] == source
+               len(REMOTE_ROOT):] == source
 
 
 @with_setup(setup_test, teardown_test)
@@ -646,15 +551,15 @@ def test_file_upload():
         print("This is the remote file.", file=f)
 
     local_files |= {"6"}
-    l = join(LOCAL_FOLDER, "6")
-    with open(l, 'w') as f:
+    lf = join(LOCAL_FOLDER, "6")
+    with open(lf, 'w') as f:
         print("This is another file.", file=f)
     remote_files |= {"6"}
-    copy(l, join(REMOTE_PATH, "6"))
+    copy(lf, join(REMOTE_PATH, "6"))
 
     local_files |= {"permissions"}
-    l = join(LOCAL_FOLDER, "permissions")
-    os.open(l, os.O_CREAT)
+    lf = join(LOCAL_FOLDER, "permissions")
+    os.open(lf, os.O_CREAT)
 
     # Sync and check that missing files where uploaded
     # Password authentication here!
