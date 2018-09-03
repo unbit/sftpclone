@@ -2,34 +2,31 @@
 # coding=utf-8
 """Setup configuration file."""
 
-from setuptools import setup
+import setuptools
 
 
 def readme():
     """Try converting the README to an RST document. Return it as is on failure."""
-    try:
-        import pypandoc
-        readme = pypandoc.convert('README.md', 'rst')
-    except(IOError, ImportError):
-        print("Warning: no pypandoc module found.")
-        try:
-            readme = open('README.md').read()
-        except IOError:
-            readme = ''
-    return readme
+    with open('README.md') as f:
+        return f.read()
 
 
-setup(
+setuptools.setup(
     name='sftpclone',
-    version='1.2.1',
+    version='1.2.2',
+
     description='A tool for cloning/syncing a local directory tree with an SFTP server.',
+
     long_description=readme(),
+    long_description_content_type="text/markdown",
+
     url='https://github.com/unbit/sftpclone',
 
     author='Adriano Di Luzio',
     author_email='adrianodl@hotmail.it',
 
-    packages=['sftpclone'],
+    packages=setuptools.find_packages(),
+
     install_requires=['paramiko==2.4.1', ],
     test_suite='nose.collector',
     tests_require=['nose', 'mock', ],
