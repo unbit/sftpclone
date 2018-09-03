@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# coding=utf-8
 
 # Python 2.7 backward compatibility
 from __future__ import print_function

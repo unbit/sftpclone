@@ -1,4 +1,5 @@
-#! /usr/bin/env python3
+#!/usr/bin/env python
+# coding=utf-8
 
 # sftpclone can be imported into a custom Python script to deploy a
 # static website to a web host where you only have stripped-down sftp
