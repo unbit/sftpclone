@@ -175,7 +175,7 @@ def test_get_ssh_agent_keys():
 def _sync(
         password=False, fix=False,
         exclude=None, ssh_agent=False,
-        delete=True
+        delete=True, identity_files=None,
 
 ):
     """Launch sync and do basic comparison of dir trees."""
@@ -184,12 +184,15 @@ def _sync(
     else:
         remote = 'test:secret@127.0.0.1:' + '/' + REMOTE_FOLDER
 
+    if identity_files is None:
+        identity_files = [t_path("id_rsa")]
+
     sync = SFTPClone(
         LOCAL_FOLDER,
         remote,
         port=2222,
         fix_symlinks=fix,
-        identity_files=[t_path("id_rsa")],
+        identity_files=identity_files,
         exclude_file=exclude,
         ssh_agent=ssh_agent,
         delete=delete
@@ -394,7 +397,7 @@ def test_ssh_agent_failure():
     # Suppress STDERR
     with SuppressLogging():
         with capture_sys_output():
-            _sync(ssh_agent=True)
+            _sync(ssh_agent=True, identity_files=[])
 
 
 @with_setup(setup_test, teardown_test)
@@ -662,7 +665,7 @@ def test_file_upload():
     for f in files:
         lf, rf = join(LOCAL_FOLDER, f), join(REMOTE_PATH, f)
         assert os.stat(lf).st_size == os.stat(rf).st_size
-        assert os.stat(lf).st_mtime == os.stat(rf).st_mtime
+        assert int(os.stat(lf).st_mtime) == int(os.stat(rf).st_mtime)
         assert os.stat(lf).st_mode == os.stat(rf).st_mode
 
         with open(lf, 'r') as f_one:
