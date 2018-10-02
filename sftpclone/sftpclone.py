@@ -121,11 +121,14 @@ class SFTPClone(object):
                  identity_files=None, port=None, fix_symlinks=False,
                  ssh_config_path=None, ssh_agent=False,
                  exclude_file=None, known_hosts_path=None,
-                 delete=True, allow_unknown=False
+                 delete=True, allow_unknown=False,
+                 create_remote_directory=False,
                  ):
         """Init the needed parameters and the SFTPClient."""
         self.local_path = os.path.realpath(os.path.expanduser(local_path))
         self.logger = logger or configure_logging()
+
+        self.create_remote_directory = create_remote_directory
 
         if not os.path.exists(self.local_path):
             self.logger.error("Local path MUST exist. Exiting.")
@@ -593,6 +596,21 @@ class SFTPClone(object):
         """Run the sync.
 
         Confront the local and the remote directories and perform the needed changes."""
+
+        # Check if remote path is present
+        try:
+            self.sftp.stat(self.remote_path)
+        except FileNotFoundError as e:
+            if self.create_remote_directory:
+                self.sftp.mkdir(self.remote_path)
+                self.logger.info(
+                    "Created missing remote dir: '" + self.remote_path + "'")
+            else:
+                self.logger.error(
+                    "Remote folder does not exists. "
+                    "Add '-r' to create it if missing.")
+                sys.exit(1)
+
         try:
             if self.delete:
                 # First check for items to be removed
@@ -717,6 +735,13 @@ def create_parser():
         "--allow-unknown",
         action="store_true",
         help="allow connection to unknown hosts"
+    )
+
+    parser.add_argument(
+        "-r",
+        "--create-remote-directory",
+        action="store_true",
+        help="Create remote root directory if missing on remote"
     )
 
     return parser
