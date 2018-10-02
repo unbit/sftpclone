@@ -741,7 +741,7 @@ def create_parser():
         "-r",
         "--create-remote-directory",
         action="store_true",
-        help="Create remote root directory if missing on remote"
+        help="Create remote base directory if missing on remote"
     )
 
     return parser
