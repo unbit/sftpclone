@@ -723,7 +723,8 @@ def test_long_unicode_file():
 
     _sync()
 
-@with_setup(teardown_test)
+
+@with_setup(None, teardown_test)
 def test_create_remote_directory():
     """Test create a remote folder."""
 
