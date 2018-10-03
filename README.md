@@ -43,6 +43,7 @@ usage: sftpclone [-h] [-k private-key-path]
                  [-l {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}] [-p PORT]
                  [-f] [-a] [-c ssh config path] [-n known_hosts path] [-d]
                  [-e exclude-from-file-path] [-t] [-o]
+                 [-r --create-remote-directory]
                  local-path user[:password]@hostname:remote-path
 ```
 
@@ -62,8 +63,9 @@ Where, for each command line argument:
 * **[e]xclude-from-file-path**: the path to a file containing a list of patterns. Each file matched by these pattern [will be ignored](#exclude-list) (not synced).
 * **do-not-dele[t]e**: do not delete remote files that are missing from the local directory.
 * **all[o]w-unknown**: do not ask for confirmation before connecting to unknown hosts.
+* **-create-[r]emote-directory**: Create remote base directory if missing. 
 
-**Warning**: be sure to select a __proper__ remote folder. 
+**Warning**: be sure to select a __proper__ remote folder.
 The synchronization process will indeed delete any file that doesn't exist in the local folder (unless you turn the `-t` option on).
 
 ## `ssh_config` compatibility
@@ -76,7 +78,7 @@ The hostname in the sftp-url parameter can be a valid entry in a `ssh_config` fi
 * `IdentityFile`
 * `ProxyCommand`
 
-Any value not found will fallback to the CLI arguments. 
+Any value not found will fallback to the CLI arguments.
 Anyway, you _have to set_ the `IdentityFile` field, otherwise authentication will try to fallback to `~/.ssh/id_rsa` and could not work.
 The first hostname matching the pattern is chosen (in the `ssh_config` way).
 
