@@ -722,3 +722,19 @@ def test_long_unicode_file():
     assert _u(long_file) in {_u(c) for c in remote_files}
 
     _sync()
+
+@with_setup(teardown_test)
+def test_create_remote_directory():
+    """Test create a remote folder."""
+
+    os.mkdir(LOCAL_FOLDER)
+    os.mkdir(join(LOCAL_FOLDER, "foofolder"))
+
+    _sync_argv([
+        LOCAL_FOLDER,
+        'test:secret@127.0.0.1:' + '/' + REMOTE_FOLDER,
+        '-p', "2222",
+        '-n', t_path("known_hosts"),
+        '-r'])
+
+    assert(os.listdir(REMOTE_PATH) == os.listdir(LOCAL_FOLDER))
