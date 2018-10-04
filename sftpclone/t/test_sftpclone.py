@@ -166,6 +166,12 @@ def _sync_argv(argv):
     assert file_tree(LOCAL_FOLDER)[LOCAL_FOLDER_NAME] == file_tree(REMOTE_PATH)[REMOTE_FOLDER]
 
 
+def _sync_argv_no_check(argv):
+    """Launch the module's main with given argv."""
+    argv.append("-o")  # allow unknown hosts
+    main(argv)
+
+
 _sync_argv.__test__ = False
 
 
@@ -730,13 +736,14 @@ def test_create_remote_subdirectory_directory():
     os.mkdir(LOCAL_FOLDER)
     os.mkdir(join(LOCAL_FOLDER, "foofolder"))
 
-    REMOTE_SUBFOLDER = join(REMOTE_FOLDER, "barfolder")
+    REMOTE_SUBFOLDER = join("a", "b", "c")
+    REMOTE_SUBPATH = join(REMOTE_PATH, REMOTE_SUBFOLDER)
 
-    _sync_argv([
+    _sync_argv_no_check([
         LOCAL_FOLDER,
-        'test:secret@127.0.0.1:' + '/' + REMOTE_SUBFOLDER,
+        'test:secret@127.0.0.1:' + '/' + join(REMOTE_FOLDER, REMOTE_SUBFOLDER),
         '-p', "2222",
         '-n', t_path("known_hosts"),
         '-r'])
 
-    assert(os.listdir(REMOTE_SUBFOLDER) == os.listdir(LOCAL_FOLDER))
+    assert(os.listdir(REMOTE_SUBPATH) == os.listdir(LOCAL_FOLDER))
