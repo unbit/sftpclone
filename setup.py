@@ -27,7 +27,7 @@ setuptools.setup(
 
     packages=setuptools.find_packages(),
 
-    install_requires=['paramiko==2.4.1', ],
+    install_requires=['paramiko==2.4.2', ],
     test_suite='nose.collector',
     tests_require=['nose', 'mock', ],
     scripts=['bin/sftpclone', ],
