@@ -596,20 +596,30 @@ class SFTPClone(object):
         """Run the sync.
 
         Confront the local and the remote directories and perform the needed changes."""
+        base_path = self.remote_path
+        append_path = []
 
-        # Check if remote path is present
-        try:
-            self.sftp.stat(self.remote_path)
-        except FileNotFoundError as e:
-            if self.create_remote_directory:
-                self.sftp.mkdir(self.remote_path)
-                self.logger.info(
-                    "Created missing remote dir: '" + self.remote_path + "'")
-            else:
-                self.logger.error(
-                    "Remote folder does not exists. "
-                    "Add '-r' to create it if missing.")
+        while(1):
+            try:
+                self.sftp.stat(base_path)
+            except FileNotFoundError:
+                append_path.append(os.path.split(base_path)[1])
+                base_path = os.path.split(base_path)[0]
+            else:  # Path exists
+                break
+
+            if not self.create_remote_directory:
+                self.logger.error("Remote folder does not exists. "
+                                  "Add '-r' to create it if missing.")
                 sys.exit(1)
+
+        if(append_path != []):
+            self.logger.info("Creating missing remote dir: '" +
+                             str(append_path) + "'")
+
+        while(append_path != []):
+            base_path = os.path.join(base_path, append_path.pop())
+            self.sftp.mkdir(base_path)
 
         try:
             if self.delete:
