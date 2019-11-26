@@ -95,11 +95,10 @@ def override_ssh_auth_env():
     ssh_auth_sock = "SSH_AUTH_SOCK"
     old_ssh_auth_sock = os.environ.get(ssh_auth_sock)
 
-    del os.environ[ssh_auth_sock]
+    if ssh_auth_sock in os.environ:
+        del os.environ[ssh_auth_sock]
 
     yield
 
     if old_ssh_auth_sock:
         os.environ[ssh_auth_sock] = old_ssh_auth_sock
-
-
