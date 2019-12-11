@@ -123,12 +123,14 @@ class SFTPClone(object):
                  exclude_file=None, known_hosts_path=None,
                  delete=True, allow_unknown=False,
                  create_remote_directory=False,
+                 traverse_remote_directories=True,
                  ):
         """Init the needed parameters and the SFTPClient."""
         self.local_path = os.path.realpath(os.path.expanduser(local_path))
         self.logger = logger or configure_logging()
 
         self.create_remote_directory = create_remote_directory
+        self.traverse_remote_directories = traverse_remote_directories
 
         if not os.path.exists(self.local_path):
             self.logger.error("Local path MUST exist. Exiting.")
@@ -440,9 +442,12 @@ class SFTPClone(object):
             if self._must_be_deleted(inner_local_path, remote_st):
                 self.remote_delete(inner_remote_path, remote_st)
             elif S_ISDIR(remote_st.st_mode):
-                self.check_for_deletion(
-                    path_join(relative_path, remote_st.filename)
-                )
+                if self.traverse_remote_directories:
+                    self.check_for_deletion(
+                        path_join(relative_path, remote_st.filename)
+                    )
+                else:
+                    self.logger.info("skipping %s as traverse_remote_directories is off", path_join(relative_path, remote_st.filename))
 
     def create_update_symlink(self, link_destination, remote_path):
         """Create a new link pointing to link_destination in remote_path position."""
