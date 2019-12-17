@@ -29,7 +29,6 @@ try:
 except NameError:
     FileNotFoundError = IOError
 
-
 def configure_logging(level=logging.DEBUG):
     """Configure the module logging engine."""
     if level == logging.DEBUG:
@@ -117,11 +116,19 @@ class SFTPClone(object):
 
     """The SFTPClone class."""
 
-    def __init__(self, local_path, remote_url,
-                 identity_files=None, port=None, fix_symlinks=False,
-                 ssh_config_path=None, ssh_agent=False,
-                 exclude_file=None, known_hosts_path=None,
-                 delete=True, allow_unknown=False,
+    def __init__(self,
+                local_path,
+                remote_url,
+                logger,
+                 identity_files=None,
+                 port=None,
+                 fix_symlinks=False,
+                 ssh_config_path=None,
+                 ssh_agent=False,
+                 exclude_file=None,
+                 known_hosts_path=None,
+                 delete=True,
+                 allow_unknown=False,
                  create_remote_directory=False,
                  traverse_remote_directories=True,
                  ):
@@ -626,6 +633,8 @@ class SFTPClone(object):
 
             # Now scan local for items to upload/create
             self.check_for_upload_create()
+
+            
         except FileNotFoundError:
             # If this happens, probably the remote folder doesn't exist.
             self.logger.error(
