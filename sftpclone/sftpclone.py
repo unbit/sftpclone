@@ -21,8 +21,6 @@ import socket
 
 """SFTPClone: sync local and remote directories."""
 
-logger = None
-
 try:
     # Not available in Python 2.x
     FileNotFoundError
@@ -119,7 +117,7 @@ class SFTPClone(object):
     def __init__(self,
                 local_path,
                 remote_url,
-                logger,
+                logger = None,
                  identity_files=None,
                  port=None,
                  fix_symlinks=False,
