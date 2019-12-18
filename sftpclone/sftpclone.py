@@ -652,7 +652,7 @@ class SFTPClone(object):
                 "Error while opening remote folder. Are you sure it does exist?")
             sys.exit(1)
 
-        return total_remote, total_deleted, total_copied
+        return stats
 
 
 def create_parser():
