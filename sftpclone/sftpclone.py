@@ -433,8 +433,12 @@ class SFTPClone(object):
 
         remote_path = path_join(self.remote_path, relative_path)
         local_path = path_join(self.local_path, relative_path)
+        
+        total_remote = 0
+        total_deleted = 0
 
         for remote_st in self.sftp.listdir_attr(remote_path):
+            total_remote++
             r_lstat = self.sftp.lstat(path_join(remote_path, remote_st.filename))
 
             inner_remote_path = path_join(remote_path, remote_st.filename)
@@ -449,13 +453,17 @@ class SFTPClone(object):
 
             if self._must_be_deleted(inner_local_path, remote_st):
                 self.remote_delete(inner_remote_path, remote_st)
+                total_deleted++
             elif S_ISDIR(remote_st.st_mode):
                 if self.traverse_remote_directories:
-                    self.check_for_deletion(
+                    sub_remote, sub_deleted = self.check_for_deletion(
                         path_join(relative_path, remote_st.filename)
                     )
+                    total_remote += sub_remote
+                    total_deleted += sub_deleted
                 else:
                     self.logger.info("skipping %s as traverse_remote_directories is off", path_join(relative_path, remote_st.filename))
+        return total_remote, total_deleted
 
     def create_update_symlink(self, link_destination, remote_path):
         """Create a new link pointing to link_destination in remote_path position."""
@@ -623,11 +631,16 @@ class SFTPClone(object):
                     "Remote folder does not exists. "
                     "Add '-r' to create it if missing.")
                 sys.exit(1)
-
+        stats = {}
+        stats["remote"]  = 0
+        stats["local"]   = 0
+        stats["deleted"] = 0
+        stats["copied"]  = 0
+        
         try:
             if self.delete:
                 # First check for items to be removed
-                self.check_for_deletion()
+                stats["remote"], stats["deleted"] = self.check_for_deletion()
 
             # Now scan local for items to upload/create
             self.check_for_upload_create()
@@ -638,6 +651,8 @@ class SFTPClone(object):
             self.logger.error(
                 "Error while opening remote folder. Are you sure it does exist?")
             sys.exit(1)
+
+        return total_remote, total_deleted, total_copied
 
 
 def create_parser():
