@@ -484,8 +484,8 @@ class SFTPClone(object):
                     remote_path, link_destination, e))
 
     def node_check_for_upload_create(self, relative_path, f):
-        total_local  = 0
-        total_copied = 0
+        self.total_local  = 0
+        self.total_copied = 0
 
         """Check if the given directory tree node has to be uploaded/created on the remote folder."""
         if not relative_path:
@@ -597,11 +597,11 @@ class SFTPClone(object):
 
         # Third case: regular file
         elif S_ISREG(l_st.st_mode):
-            total_local +=1
+            self.total_local +=1
             try:
                 r_st = self.sftp.lstat(remote_path)
                 if self._file_need_upload(l_st, r_st):
-                    total_copied += 1
+                    self.total_copied += 1
                     self.file_upload(local_path, remote_path, l_st)
             except IOError as e:
                 if e.errno == errno.ENOENT:
@@ -610,8 +610,6 @@ class SFTPClone(object):
         # Anything else.
         else:
             self.logger.warning("Skipping unsupported file %s.", local_path)
-
-        return total_local, total_copied
 
     def check_for_upload_create(self, relative_path=None):
         """Traverse the relative_path tree and check for files that need to be uploaded/created.
@@ -643,9 +641,7 @@ class SFTPClone(object):
                 sys.exit(1)
         stats = {}
         stats["remote"]  = 0
-        stats["local"]   = 0
-        stats["deleted"] = 0
-        stats["copied"]  = 0
+        stats["deleted"]   = 0
         
         try:
             if self.delete:
@@ -661,6 +657,9 @@ class SFTPClone(object):
             self.logger.error(
                 "Error while opening remote folder. Are you sure it does exist?")
             sys.exit(1)
+            
+        stats["local"] = self.total_local
+        stats["copied"]  = self.total_copied
 
         return stats
 
