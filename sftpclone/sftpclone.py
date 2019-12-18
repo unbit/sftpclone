@@ -649,7 +649,7 @@ class SFTPClone(object):
                 stats["remote"], stats["deleted"] = self.check_for_deletion()
 
             # Now scan local for items to upload/create
-            stats["local"], stats["copied"] = self.check_for_upload_create()
+            self.check_for_upload_create()
 
             
         except FileNotFoundError:
@@ -657,7 +657,7 @@ class SFTPClone(object):
             self.logger.error(
                 "Error while opening remote folder. Are you sure it does exist?")
             sys.exit(1)
-            
+
         stats["local"] = self.total_local
         stats["copied"]  = self.total_copied
 
