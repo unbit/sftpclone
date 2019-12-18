@@ -137,6 +137,11 @@ class SFTPClone(object):
         self.create_remote_directory = create_remote_directory
         self.traverse_remote_directories = traverse_remote_directories
 
+        self.total_remote = 0
+        self.total_deleted = 0
+        self.total_local = 0
+        self.total_copied = 0
+
         if not os.path.exists(self.local_path):
             self.logger.error("Local path MUST exist. Exiting.")
             sys.exit(1)
@@ -434,11 +439,8 @@ class SFTPClone(object):
         remote_path = path_join(self.remote_path, relative_path)
         local_path = path_join(self.local_path, relative_path)
         
-        total_remote = 0
-        total_deleted = 0
-
         for remote_st in self.sftp.listdir_attr(remote_path):
-            total_remote += 1
+            self.total_remote += 1
 
             r_lstat = self.sftp.lstat(path_join(remote_path, remote_st.filename))
 
@@ -448,25 +450,26 @@ class SFTPClone(object):
             # check if remote_st is a symlink
             # otherwise could delete file outside shared directory
             if S_ISLNK(r_lstat.st_mode):
+                # don't count links in file stats
+                self.total_remote -= 1 
+
                 if self._must_be_deleted(inner_local_path, r_lstat):
                     self.remote_delete(inner_remote_path, r_lstat)
                 continue
 
             if self._must_be_deleted(inner_local_path, remote_st):
                 self.remote_delete(inner_remote_path, remote_st)
-                total_deleted += 1
+                self.total_deleted += 1
             elif S_ISDIR(remote_st.st_mode):
                 # don't count directories in file stats
-                total_remote -= 1 
+                self.total_remote -= 1 
+                # Skip if traverse directories is turned off
                 if self.traverse_remote_directories:
                     sub_remote, sub_deleted = self.check_for_deletion(
                         path_join(relative_path, remote_st.filename)
                     )
-                    total_remote += sub_remote
-                    total_deleted += sub_deleted
                 else:
                     self.logger.info("skipping %s as traverse_remote_directories is off", path_join(relative_path, remote_st.filename))
-        return total_remote, total_deleted
 
     def create_update_symlink(self, link_destination, remote_path):
         """Create a new link pointing to link_destination in remote_path position."""
@@ -484,9 +487,6 @@ class SFTPClone(object):
                     remote_path, link_destination, e))
 
     def node_check_for_upload_create(self, relative_path, f):
-        self.total_local  = 0
-        self.total_copied = 0
-
         """Check if the given directory tree node has to be uploaded/created on the remote folder."""
         if not relative_path:
             # we're at the root of the shared directory tree
@@ -639,14 +639,11 @@ class SFTPClone(object):
                     "Remote folder does not exists. "
                     "Add '-r' to create it if missing.")
                 sys.exit(1)
-        stats = {}
-        stats["remote"]  = 0
-        stats["deleted"]   = 0
         
         try:
             if self.delete:
                 # First check for items to be removed
-                stats["remote"], stats["deleted"] = self.check_for_deletion()
+                self.check_for_deletion()
 
             # Now scan local for items to upload/create
             self.check_for_upload_create()
@@ -658,8 +655,11 @@ class SFTPClone(object):
                 "Error while opening remote folder. Are you sure it does exist?")
             sys.exit(1)
 
-        stats["local"] = self.total_local
-        stats["copied"]  = self.total_copied
+        stats = {}
+        stats["remote"]    = self.total_remote
+        stats["deleted"]   = self.total_deleted
+        stats["local"]     = self.total_local
+        stats["copied"]    = self.total_copied
 
         return stats
 
