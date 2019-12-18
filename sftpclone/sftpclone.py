@@ -438,7 +438,7 @@ class SFTPClone(object):
         total_deleted = 0
 
         for remote_st in self.sftp.listdir_attr(remote_path):
-            total_remote++
+            total_remote += 1
             r_lstat = self.sftp.lstat(path_join(remote_path, remote_st.filename))
 
             inner_remote_path = path_join(remote_path, remote_st.filename)
@@ -453,7 +453,7 @@ class SFTPClone(object):
 
             if self._must_be_deleted(inner_local_path, remote_st):
                 self.remote_delete(inner_remote_path, remote_st)
-                total_deleted++
+                total_deleted += 1
             elif S_ISDIR(remote_st.st_mode):
                 if self.traverse_remote_directories:
                     sub_remote, sub_deleted = self.check_for_deletion(
