@@ -439,6 +439,7 @@ class SFTPClone(object):
 
         for remote_st in self.sftp.listdir_attr(remote_path):
             total_remote += 1
+
             r_lstat = self.sftp.lstat(path_join(remote_path, remote_st.filename))
 
             inner_remote_path = path_join(remote_path, remote_st.filename)
@@ -455,6 +456,8 @@ class SFTPClone(object):
                 self.remote_delete(inner_remote_path, remote_st)
                 total_deleted += 1
             elif S_ISDIR(remote_st.st_mode):
+                # don't count directories in file stats
+                total_remote -= 1 
                 if self.traverse_remote_directories:
                     sub_remote, sub_deleted = self.check_for_deletion(
                         path_join(relative_path, remote_st.filename)
@@ -481,6 +484,9 @@ class SFTPClone(object):
                     remote_path, link_destination, e))
 
     def node_check_for_upload_create(self, relative_path, f):
+        total_local  = 0
+        total_copied = 0
+
         """Check if the given directory tree node has to be uploaded/created on the remote folder."""
         if not relative_path:
             # we're at the root of the shared directory tree
@@ -591,9 +597,11 @@ class SFTPClone(object):
 
         # Third case: regular file
         elif S_ISREG(l_st.st_mode):
+            total_local +=1
             try:
                 r_st = self.sftp.lstat(remote_path)
                 if self._file_need_upload(l_st, r_st):
+                    total_copied += 1
                     self.file_upload(local_path, remote_path, l_st)
             except IOError as e:
                 if e.errno == errno.ENOENT:
@@ -602,6 +610,8 @@ class SFTPClone(object):
         # Anything else.
         else:
             self.logger.warning("Skipping unsupported file %s.", local_path)
+
+        return total_local, total_copied
 
     def check_for_upload_create(self, relative_path=None):
         """Traverse the relative_path tree and check for files that need to be uploaded/created.
@@ -643,7 +653,7 @@ class SFTPClone(object):
                 stats["remote"], stats["deleted"] = self.check_for_deletion()
 
             # Now scan local for items to upload/create
-            self.check_for_upload_create()
+            stats["local"], stats["copied"] = self.check_for_upload_create()
 
             
         except FileNotFoundError:
