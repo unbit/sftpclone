@@ -405,6 +405,7 @@ class SFTPClone(object):
         """Upload local_path to remote_path and set permission and mtime."""
         self.sftp.put(local_path, remote_path)
         self._match_modes(remote_path, l_st)
+        self.total_copied += 1
 
     def remote_delete(self, remote_path, r_st):
         """Remove the remote directory node."""
@@ -460,6 +461,7 @@ class SFTPClone(object):
             if self._must_be_deleted(inner_local_path, remote_st):
                 self.remote_delete(inner_remote_path, remote_st)
                 self.total_deleted += 1
+
             elif S_ISDIR(remote_st.st_mode):
                 # don't count directories in file stats
                 self.total_remote -= 1 
@@ -601,7 +603,6 @@ class SFTPClone(object):
             try:
                 r_st = self.sftp.lstat(remote_path)
                 if self._file_need_upload(l_st, r_st):
-                    self.total_copied += 1
                     self.file_upload(local_path, remote_path, l_st)
             except IOError as e:
                 if e.errno == errno.ENOENT:
