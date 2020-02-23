@@ -56,7 +56,10 @@ def path_join(*args):
     Makes sure to join paths of the same type (bytes).
     """
     args = (paramiko.py3compat.u(arg) for arg in args)
-    return os.path.join(*args)
+    joined = os.path.join(*args)
+    # make sure slash direction is the same for the whole path
+    joined = joined.replace("\\", "/")
+    return joined
 
 
 def parse_username_password_hostname(remote_url):
