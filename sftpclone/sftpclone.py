@@ -57,7 +57,8 @@ def path_join(*args):
     """
     args = (paramiko.py3compat.u(arg) for arg in args)
     joined = os.path.join(*args)
-    joined = joined.replace("\\", "/")  # same slash direction for all path
+    # make sure slash direction is the same for the whole path
+    joined = joined.replace("\\", "/")
     return joined
 
 
